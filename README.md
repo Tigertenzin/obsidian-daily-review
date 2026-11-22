@@ -4,8 +4,7 @@ An Obsidian plugin for working through a backlog of periodic notes (daily, weekl
 yearly). It shows one note at a time, lists that note's **open items** grouped by type, and
 marks the note reviewed once you've dealt with them.
 
-> **Status:** early development. There is no release yet, so the plugin can't be installed
-> until the first version is published.
+> **Status:** early development (0.x). Expect rough edges, and please report what breaks.
 
 ## What it does
 
@@ -45,10 +44,36 @@ Until the plugin is in the community store, install it with
 
 BRAT checks for new releases and updates the plugin for you.
 
+## Settings
+
+- **Notes:** the folder and tag that mark a note as periodic, and each kind's tag and
+  title format (moment.js syntax). Every kind (daily, weekly, monthly, quarterly, yearly)
+  can be included in or left out of the review.
+- **Review state:** the frontmatter field to read and write, and what a missing field means.
+- **Item types:** an ordered list. Each type has a label, a colour and heading patterns.
+  A live preview shows which headings in your notes each type matches, and which
+  headings count as Other.
+- **The page:** how open items are highlighted (tint, bar, checkbox or nothing), which
+  code block languages to hide (queries like `tasks` and `dataview`), and whether
+  checkboxes can be ticked from the page. Items carrying the task tag are toggled through
+  the [Tasks](https://github.com/obsidian-tasks-group/obsidian-tasks) plugin when it's
+  installed, so its done dates and recurrence apply.
+
 ## Development
 
-Not set up yet. The plan: TypeScript and esbuild, from the official Obsidian sample plugin,
-with the note-parsing logic kept in pure functions and unit-tested with vitest.
+```sh
+npm install
+npm test            # unit tests for the parsing core (vitest)
+npm run build       # type-check and build main.js
+OUT_DIR=/path/to/vault/.obsidian/plugins/periodic-note-review npm run dev   # watch build
+```
+
+The parsing logic lives in `src/core/` as pure functions with no Obsidian dependencies
+beyond `moment`; the view, store and settings tab are in `src/`.
+
+To release: `npm version patch` (updates `manifest.json` and `versions.json`), push the
+tag, and attach `main.js`, `manifest.json` and `styles.css` to a GitHub release named
+after the version.
 
 ## License
 

@@ -1,0 +1,29 @@
+{
+  "name": "periodic-note-review",
+  "version": "0.1.0",
+  "description": "Review a backlog of periodic notes one page at a time, with their open items highlighted.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
+    "test": "vitest run",
+    "version": "node version-bump.mjs && git add manifest.json versions.json"
+  },
+  "keywords": [
+    "obsidian",
+    "periodic notes",
+    "daily notes",
+    "review"
+  ],
+  "author": "Tigertenzin",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "esbuild": "^0.28.2",
+    "moment": "^2.29.4",
+    "obsidian": "^1.14.4",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.1"
+  }
+}
