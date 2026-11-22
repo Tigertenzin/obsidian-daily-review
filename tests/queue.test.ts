@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { longAge, NoteEntry, rangeLabel, shortAge, sortEntries, ticksFor } from "../src/core/queue";
-import { mergeSettings } from "../src/core/settings";
+import { example } from "./fixtures";
 
-const S = mergeSettings({});
+const S = example();
 function entry(p: Partial<NoteEntry>): NoteEntry {
 	return { path: "x", title: "x", kind: "daily", start: "2026-11-20", end: "2026-11-20", anchor: "2026-11-20",
 		isWeekend: false, needsReview: true, counts: {}, open: 0, tasks: 0, settled: 0, ...p };

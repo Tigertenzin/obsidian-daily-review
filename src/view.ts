@@ -168,6 +168,35 @@ export class ReviewView extends ItemView {
 	private setQueueOpen(open: boolean) {
 		this.queueOpen = open;
 		this.contentEl.toggleClass("is-queue-open", open);
+		if (open) window.requestAnimationFrame(() => this.revealCurrentRow());
+	}
+
+	private queueVisible(): boolean {
+		return !this.contentEl.hasClass("is-narrow") || this.queueOpen;
+	}
+
+	/**
+	 * Scroll the queue list (and nothing else) so the current row is in view.
+	 * Element.scrollIntoView would also scroll every ancestor, including sideways
+	 * toward the off-screen drawer on narrow panes.
+	 */
+	private revealCurrentRow() {
+		if (!this.queueVisible()) return;
+		const list = this.queueEl.querySelector<HTMLElement>(".pnr-queue-list");
+		const row = list?.querySelector<HTMLElement>(".pnr-row.is-current");
+		if (!list || !row) return;
+		const top = row.offsetTop;
+		const bottom = top + row.offsetHeight;
+		const pad = 40;
+		if (top - pad < list.scrollTop) list.scrollTop = Math.max(0, top - pad);
+		else if (bottom + pad > list.scrollTop + list.clientHeight) list.scrollTop = bottom + pad - list.clientHeight;
+	}
+
+	/** Undo any sideways scroll an ancestor may have picked up. */
+	private resetSideways() {
+		for (let el: HTMLElement | null = this.mainEl; el && el !== document.body; el = el.parentElement) {
+			if (el.scrollLeft !== 0) el.scrollLeft = 0;
+		}
 	}
 
 	private renderAll() {
@@ -271,7 +300,6 @@ export class ReviewView extends ItemView {
 		const dateSort = this.settings.sort === "oldest" || this.settings.sort === "newest";
 		let lastGroup = "";
 		let lastPast: boolean | null = null;
-		let currentRow: HTMLElement | null = null;
 
 		if (vis.length === 0) list.createDiv({ cls: "pnr-queue-empty", text: "Nothing here." });
 
@@ -286,15 +314,11 @@ export class ReviewView extends ItemView {
 					lastGroup = g;
 				}
 			}
-			const row = this.renderRow(list, e, today);
-			if (e.path === this.currentPath) currentRow = row;
+			this.renderRow(list, e, today);
 		}
 
 		list.scrollTop = prevScroll;
-		if (currentRow) {
-			const r = currentRow;
-			window.requestAnimationFrame(() => r.scrollIntoView({ block: "nearest" }));
-		}
+		window.requestAnimationFrame(() => this.revealCurrentRow());
 	}
 
 	private renderRow(list: HTMLElement, e: NoteEntry, today: string): HTMLElement {
@@ -375,6 +399,7 @@ export class ReviewView extends ItemView {
 	goTo(path: string | null) {
 		this.currentPath = path;
 		this.mainEl.scrollTop = 0;
+		this.resetSideways();
 		// Take focus back from whichever button was clicked, so Enter means "mark reviewed".
 		if (this.contentEl.contains(document.activeElement) || document.activeElement === document.body) {
 			this.contentEl.focus({ preventScroll: true });
@@ -725,7 +750,10 @@ export class ReviewView extends ItemView {
 		const i = this.analysis.renderedItems.findIndex((it) => it.typeId === typeId && it.state === "open");
 		const li = this.itemEls[i];
 		if (!li) return;
-		li.scrollIntoView({ block: "center", behavior: this.reducedMotion() ? "auto" : "smooth" });
+		// Scroll only the page's own scroller, vertically.
+		const main = this.mainEl;
+		const y = li.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop;
+		main.scrollTo({ top: Math.max(0, y - main.clientHeight / 3), behavior: this.reducedMotion() ? "auto" : "smooth" });
 		li.removeClass("pnr-flash");
 		void li.offsetWidth;
 		li.addClass("pnr-flash");

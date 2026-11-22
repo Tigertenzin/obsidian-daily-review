@@ -6,6 +6,7 @@
 	flex-direction: column;
 	height: 100%;
 	overflow: hidden;
+	overflow: clip;
 	--pnr-queue-width: 280px;
 }
 .pnr-view *,
@@ -122,6 +123,8 @@
 	min-height: 0;
 	min-width: 0;
 	position: relative;
+	overflow: hidden;
+	overflow: clip;
 }
 .pnr-main {
 	flex: 1 1 auto;
@@ -131,6 +134,8 @@
 	background: var(--background-secondary);
 	padding: var(--size-4-6) var(--size-4-6) 0;
 	overscroll-behavior-x: none;
+	/* The page only ever scrolls up and down; sideways swipes are ours. */
+	touch-action: pan-y pinch-zoom;
 }
 .pnr-sheet-wrap {
 	max-width: calc(var(--file-line-width, 700px) + 2 * var(--size-4-12));
@@ -473,6 +478,7 @@
 	display: none;
 }
 .pnr-queue-list {
+	position: relative;
 	flex: 1 1 auto;
 	overflow-y: auto;
 	overflow-x: hidden;
@@ -619,20 +625,24 @@
 .pnr-view.is-narrow .pnr-sheet {
 	padding: var(--size-4-5) var(--size-4-4) var(--size-4-8);
 }
+/* The drawer is out of the layout while closed, so nothing sits off screen. */
 .pnr-view.is-narrow .pnr-queue {
+	display: none;
 	position: absolute;
 	inset: 0 0 0 auto;
 	width: min(320px, 88%);
 	z-index: 10;
 	box-shadow: var(--shadow-l);
-	transform: translateX(100%);
-	visibility: hidden;
-	transition: transform 0.2s ease, visibility 0s linear 0.2s;
 }
 .pnr-view.is-narrow.is-queue-open .pnr-queue {
-	transform: none;
-	visibility: visible;
-	transition: transform 0.2s ease;
+	display: flex;
+	animation: pnr-drawer-in 0.18s ease-out;
+}
+@keyframes pnr-drawer-in {
+	from {
+		opacity: 0;
+		clip-path: inset(0 0 0 30%);
+	}
 }
 .pnr-view.is-narrow .pnr-queue-close {
 	display: inline-flex;
@@ -655,7 +665,8 @@
 		transform: rotate(-8deg);
 	}
 	.pnr-sheet.is-stamped,
-	.pnr-flash > .pnr-line {
+	.pnr-flash > .pnr-line,
+	.pnr-view.is-narrow.is-queue-open .pnr-queue {
 		animation: none;
 	}
 }

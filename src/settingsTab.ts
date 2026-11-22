@@ -372,7 +372,7 @@ export class ReviewSettingTab extends PluginSettingTab {
 			}));
 	}
 
-	/** "Matches in your notes: The Fun Stuff (532), Fun Stuff (2)…" */
+	/** "Matches in your notes: Fun (40), Just for fun (2)…" */
 	private renderPreview(el: HTMLElement, t: ItemType) {
 		el.empty();
 		const index = this.plugin.store.headingIndex();

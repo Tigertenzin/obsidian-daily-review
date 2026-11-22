@@ -46,6 +46,10 @@ BRAT checks for new releases and updates the plugin for you.
 
 ## Settings
 
+Out of the box it looks for notes titled `2026-11-22`, `2026-W47`, `2026-11`, `2026-Q4`
+and `2026` anywhere in the vault, and treats a note as unreviewed until its frontmatter
+has `reviewed: true`. Every part of that can be changed:
+
 - **Notes:** the folder and tag that mark a note as periodic, and each kind's tag and
   title format (moment.js syntax). Every kind (daily, weekly, monthly, quarterly, yearly)
   can be included in or left out of the review.

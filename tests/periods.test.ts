@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { classifyNote, daysAgo, hasTag, parseTitle } from "../src/core/periods";
-import { DEFAULT_SETTINGS, mergeSettings } from "../src/core/settings";
+import { DEFAULT_SETTINGS } from "../src/core/settings";
+import { example } from "./fixtures";
 
-const S = mergeSettings({});
+const S = example();
 S.kinds.quarterly.enabled = true;
 
 describe("classifyNote", () => {
@@ -20,7 +21,8 @@ describe("classifyNote", () => {
 
 	it("prefix matching is optional", () => {
 		expect(classifyNote("2026-11-22 Sun - trip", ["daily"], S)?.anchor).toBe("2026-11-22");
-		const strict = mergeSettings({ titlePrefixMatch: false });
+		const strict = example();
+		strict.titlePrefixMatch = false;
 		expect(classifyNote("2026-11-22 Sun - trip", ["daily"], strict)).toBeNull();
 	});
 
@@ -47,18 +49,18 @@ describe("classifyNote", () => {
 	it("monthly, quarterly, yearly", () => {
 		expect(classifyNote("2026-11 Nov", ["monthly"], S)?.anchor).toBe("2026-11-30");
 		expect(classifyNote("2026-Q4", ["quarterly"], S)).toMatchObject({ start: "2026-10-01", anchor: "2026-12-31" });
-		expect(classifyNote("✱ 2026", ["yearly"], S)).toMatchObject({ kind: "yearly", anchor: "2026-12-31" });
+		expect(classifyNote("Year 2026", ["yearly"], S)).toMatchObject({ kind: "yearly", anchor: "2026-12-31" });
 	});
 
 	it("kind tags win longest period first", () => {
-		expect(classifyNote("✱ 2026", ["weekly", "yearly"], S)?.kind).toBe("yearly");
+		expect(classifyNote("Year 2026", ["weekly", "yearly"], S)?.kind).toBe("yearly");
 	});
 
 	it("disabled kinds are left out", () => {
-		const s = mergeSettings({});
+		const s = example();
 		s.kinds.weekly.enabled = false;
 		expect(classifyNote("2026-W47", ["weekly"], s)).toBeNull();
-		expect(classifyNote("2026-Q4", ["quarterly"], DEFAULT_SETTINGS)).toBeNull();
+		expect(classifyNote("2026-Q4", ["quarterly"], example())).toBeNull();
 	});
 });
 
@@ -74,5 +76,21 @@ describe("helpers", () => {
 	});
 	it("parseTitle strict", () => {
 		expect(parseTitle("2026-W47", "GGGG-[W]WW", false)?.isValid()).toBe(true);
+	});
+});
+
+describe("generic defaults", () => {
+	it("untagged notes get their kind from the title", () => {
+		const D = DEFAULT_SETTINGS;
+		expect(classifyNote("2026-11-22", [], D)?.kind).toBe("daily");
+		expect(classifyNote("2026-W47", [], D)?.kind).toBe("weekly");
+		expect(classifyNote("2026-11", [], D)?.kind).toBe("monthly");
+		expect(classifyNote("2026-Q4", [], D)?.kind).toBe("quarterly");
+		expect(classifyNote("2026", [], D)?.kind).toBe("yearly");
+		expect(classifyNote("2026 goals", [], D)).toBeNull();
+		expect(classifyNote("Shopping list", [], D)).toBeNull();
+	});
+	it("a kind tag still decides the kind", () => {
+		expect(classifyNote("2026-11", ["weekly"], DEFAULT_SETTINGS)).toBeNull();
 	});
 });

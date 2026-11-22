@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { analyzeNote, domainLabel, firstLinkDomain, isNavLine, plainItemText, withMark } from "../src/core/parse";
-import { mergeSettings } from "../src/core/settings";
+import { example } from "./fixtures";
 
-const S = mergeSettings({});
+const S = example();
 
 const NOTE = `---
 tags:
   - daily
-dailyNotetStatus: FALSE
+reviewed: FALSE
 ---
 
 # 2026-11-20 Fri
@@ -19,7 +19,7 @@ dailyNotetStatus: FALSE
 not done
 \`\`\`
 ----
-## Stuff I Did Today
+## Work Log
 - [ ] write report #task
 - [x] send email #task
 - [ ] tidy desk
@@ -29,14 +29,14 @@ not done
 - [-] cancelled thing
 - [/] in progress thing
 ---
-## The Fun Stuff
+## Just For Fun
 - [ ] call a friend
 - [ ] look at #tasks list
 \`\`\`
 - [ ] inside a code block
 \`\`\`
 ---
-## media reminders
+## Media to watch
 - [ ] [A show](https://www.example.com/show)
 	**summary**: something
 > [!note]
@@ -80,12 +80,12 @@ describe("analyzeNote", () => {
 
 	it("hides frontmatter, query blocks, nav line, title and empty headings", () => {
 		const shown = a.renderText.split("\n").filter((l) => l.trim());
-		expect(shown[0]).toBe("## Stuff I Did Today");
+		expect(shown[0]).toBe("## Work Log");
 		expect(a.renderText).not.toContain("## Tasks");
 		expect(a.renderText).not.toContain("## Finished Today");
 		expect(a.renderText).not.toContain("Prev");
 		expect(a.renderText).not.toContain("# 2026-11-20 Fri");
-		expect(a.renderText).not.toContain("dailyNotetStatus");
+		expect(a.renderText).not.toContain("reviewed");
 		expect(a.renderText).not.toContain("----");
 		expect(a.renderText.split("\n").length).toBe(NOTE.split("\n").length);
 	});
@@ -97,7 +97,7 @@ describe("analyzeNote", () => {
 	});
 
 	it("a new item type picks up a previously unmatched heading", () => {
-		const s = mergeSettings({});
+		const s = example();
 		s.itemTypes.push({ id: "weekly-tasks", label: "Weekly tasks", color: "", headings: ["daily notes"],
 			match: "exact", enabled: true, domainLabels: {} });
 		const w = analyzeNote("## Daily Notes\n- [ ] x #task\n- [x] y #task\n", "2026-W47", s);
@@ -105,9 +105,9 @@ describe("analyzeNote", () => {
 	});
 
 	it("list order decides overlaps; disabled types count as Other", () => {
-		const n = "## fun stuff and media\n- [ ] x\n";
+		const n = "## fun and media\n- [ ] x\n";
 		expect(analyzeNote(n, "t", S).items[0].typeId).toBe("fun");
-		const s = mergeSettings({});
+		const s = example();
 		s.itemTypes[1].enabled = false;
 		expect(analyzeNote(n, "t", s).items[0].typeId).toBe("media");
 		s.itemTypes[2].enabled = false;
@@ -115,9 +115,10 @@ describe("analyzeNote", () => {
 	});
 
 	it("an H1 resets to Other; hidden Other isn't counted", () => {
-		const n = "## The Fun Stuff\n- [ ] a\n# Big\n- [ ] b\n";
+		const n = "## Just For Fun\n- [ ] a\n# Big\n- [ ] b\n";
 		expect(analyzeNote(n, "t", S).items.map((i) => i.typeId)).toEqual(["fun", "other"]);
-		const s = mergeSettings({ other: { label: "Other", color: "", hidden: true } });
+		const s = example();
+		s.other.hidden = true;
 		expect(analyzeNote(n, "t", s).open).toBe(1);
 	});
 
@@ -148,7 +149,7 @@ describe("helpers", () => {
 
 describe("comments", () => {
 	it("items inside %% comments %% are not counted", () => {
-		const n = "## The Fun Stuff\n%%\n- [ ] hidden\n%%\n%% - [ ] inline %%\n- [ ] shown\n";
+		const n = "## Just For Fun\n%%\n- [ ] hidden\n%%\n%% - [ ] inline %%\n- [ ] shown\n";
 		const a = analyzeNote(n, "t", S);
 		expect(a.items.map((i) => i.text)).toEqual(["shown"]);
 		expect(a.renderText).not.toContain("hidden");

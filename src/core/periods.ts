@@ -1,5 +1,5 @@
 import { moment } from "obsidian";
-import { Kind, KIND_TAG_ORDER, KINDS, Settings } from "./settings";
+import { Kind, KIND_TAG_ORDER, KIND_TITLE_ORDER, KINDS, Settings } from "./settings";
 
 type Moment = import("moment").Moment;
 
@@ -31,12 +31,13 @@ export function hasTag(tags: string[], tag: string): boolean {
 	});
 }
 
-export function kindFromTags(tags: string[], settings: Settings): Kind {
+/** The kind a note's tags give it, or null when it has none of the kind tags. */
+export function kindFromTags(tags: string[], settings: Settings): Kind | null {
 	for (const k of KIND_TAG_ORDER) {
 		const tag = settings.kinds[k].tag;
 		if (tag && hasTag(tags, tag)) return k;
 	}
-	return "daily";
+	return null;
 }
 
 /**
@@ -110,12 +111,22 @@ export function periodFor(kind: Kind, date: Moment, format: string): Omit<Period
  * isn't part of the review: its kind is switched off, or its title doesn't parse.
  */
 export function classifyNote(title: string, tags: string[], settings: Settings): Period | null {
-	const kind = kindFromTags(tags, settings);
-	const ks = settings.kinds[kind];
-	if (!ks.enabled) return null;
-	const date = parseTitle(title, ks.titleFormat, settings.titlePrefixMatch);
-	if (!date) return null;
-	return { kind, ...periodFor(kind, date, ks.titleFormat) };
+	const tagged = kindFromTags(tags, settings);
+	if (tagged) {
+		// A kind tag decides the kind; the title must then parse with that kind's format.
+		const ks = settings.kinds[tagged];
+		if (!ks.enabled) return null;
+		const date = parseTitle(title, ks.titleFormat, settings.titlePrefixMatch);
+		return date ? { kind: tagged, ...periodFor(tagged, date, ks.titleFormat) } : null;
+	}
+	// No kind tag: the first enabled kind whose title format fits, most specific first.
+	for (const kind of KIND_TITLE_ORDER) {
+		const ks = settings.kinds[kind];
+		if (!ks.enabled) continue;
+		const date = parseTitle(title, ks.titleFormat, settings.titlePrefixMatch);
+		if (date) return { kind, ...periodFor(kind, date, ks.titleFormat) };
+	}
+	return null;
 }
 
 /** Whole days from `anchor` to `today` (both YYYY-MM-DD). Positive = in the past. */

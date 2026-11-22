@@ -80,12 +80,19 @@ export interface Settings {
 
 export const OTHER_ID = "other";
 
+/** Title formats tried, in this order, for a note that has no kind tag. */
+export const KIND_TITLE_ORDER: Kind[] = ["daily", "weekly", "quarterly", "monthly", "yearly"];
+
+/**
+ * Generic defaults: Obsidian's own daily-note title format, ISO weeks, a "reviewed"
+ * field that's missing until the note is reviewed, and no item types yet.
+ */
 export const DEFAULT_SETTINGS: Settings = {
-	folder: "01 - Daily",
-	membershipTag: "daily",
+	folder: "",
+	membershipTag: "",
 	kinds: {
 		daily: {
-			enabled: true, tag: "", titleFormat: "YYYY-MM-DD ddd", missingStatus: "reviewed",
+			enabled: true, tag: "", titleFormat: "YYYY-MM-DD", missingStatus: "unreviewed",
 			statusField: "", reviewedValue: "", canMarkReviewed: true,
 		},
 		weekly: {
@@ -93,42 +100,23 @@ export const DEFAULT_SETTINGS: Settings = {
 			statusField: "", reviewedValue: "", canMarkReviewed: true,
 		},
 		monthly: {
-			enabled: true, tag: "monthly", titleFormat: "YYYY-MM MMM", missingStatus: "unreviewed",
+			enabled: true, tag: "monthly", titleFormat: "YYYY-MM", missingStatus: "unreviewed",
 			statusField: "", reviewedValue: "", canMarkReviewed: true,
 		},
 		quarterly: {
-			enabled: false, tag: "quarterly", titleFormat: "YYYY-[Q]Q", missingStatus: "unreviewed",
+			enabled: true, tag: "quarterly", titleFormat: "YYYY-[Q]Q", missingStatus: "unreviewed",
 			statusField: "", reviewedValue: "", canMarkReviewed: true,
 		},
 		yearly: {
-			enabled: true, tag: "yearly", titleFormat: "[✱ ]YYYY", missingStatus: "unreviewed",
-			statusField: "projectStatus", reviewedValue: "completed", canMarkReviewed: false,
+			enabled: true, tag: "yearly", titleFormat: "YYYY", missingStatus: "unreviewed",
+			statusField: "", reviewedValue: "", canMarkReviewed: true,
 		},
 	},
-	titlePrefixMatch: true,
-	statusField: "dailyNotetStatus",
+	titlePrefixMatch: false,
+	statusField: "reviewed",
 	unreviewedValue: "false",
 	sectionLevel: 2,
-	itemTypes: [
-		{
-			id: "work", label: "Work", color: "#4f8fe8", headings: ["stuff i did today"],
-			match: "contains", enabled: true, domainLabels: {},
-		},
-		{
-			id: "fun", label: "Fun", color: "#38a169", headings: ["fun stuff"],
-			match: "contains", enabled: true, domainLabels: {},
-		},
-		{
-			id: "media", label: "Media to return to", color: "#a36ee8", headings: ["media"],
-			match: "contains", enabled: true,
-			domainLabels: {
-				"anilist.co": "Manga",
-				"mangadex.org": "Manga",
-				"store.steampowered.com": "Video Games",
-				"steampowered.com": "Video Games",
-			},
-		},
-	],
+	itemTypes: [],
 	other: { label: "Other", color: "#8a8f98", hidden: false },
 	openMarks: [" "],
 	settledMarks: ["x", "X", "-"],
