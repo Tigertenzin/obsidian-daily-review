@@ -1,0 +1,14 @@
+# dependencies
+node_modules/
+
+# build output (attached to GitHub releases, not committed)
+main.js
+*.js.map
+
+# local working notes
+SPEC.md
+
+# editors / OS
+.vscode/
+.idea/
+.DS_Store
