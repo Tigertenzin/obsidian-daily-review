@@ -1,4 +1,4 @@
-# Daily Review
+# Periodic Note Review
 
 An Obsidian plugin for working through a backlog of periodic notes (daily, weekly, monthly,
 yearly). It shows one note at a time, lists that note's **open items** grouped by type, and
@@ -15,14 +15,20 @@ marks the note reviewed once you've dealt with them.
 - **One note per page.** Renders the note the way Obsidian does, with query blocks
   (`tasks`, `dataview`) and navigation lines stripped out so you see only that day's
   content.
-- **Loose ends.** Lists the note's unchecked items, grouped by *item type*. An item's type
-  comes from the section heading it sits under. For example everything under
-  "Stuff I Did Today" counts as Work, and everything under "The Fun Stuff" counts as Fun.
-- **Mark reviewed.** One click (or Enter twice) sets the note's status field in its
-  frontmatter, changing only that one line, and moves on to the next note.
-- **Keyboard first.** `←`/`→` (or `k`/`j`) move through the queue, Enter marks the note
-  reviewed, `o` opens it in the editor. Every action is also a command, so it can be given a
-  hotkey or used on mobile.
+- **Open items, colour-coded.** Unchecked items are highlighted by *item type*, each with
+  its own colour. An item's type comes from the section heading it sits under, so for
+  example everything under a "Work" heading counts as Work.
+- **A queue at a glance.** The notes still to review are listed beside the page, each
+  showing how many open items it has left, and of which types.
+- **Mark reviewed.** Sets the note's status field in its frontmatter, changing only that
+  one line, and moves on to the next note. If items are still open, it asks first.
+- **Check items off in place.** Click a checkbox on the page to check or uncheck it in
+  the note.
+- **Keyboard and touch.** `←`/`→` move through the queue on desktop; swipe left and right
+  on mobile. An "Open note" button opens the note in the normal editor. Every action is
+  also a command, so it can be given a hotkey.
+
+Start it from the command palette with **Periodic Note Review: Open daily review**.
 
 Folders, tags, frontmatter fields, title formats and item types are all settings, so the
 plugin should fit any vault that keeps periodic notes with a review flag.
@@ -35,7 +41,7 @@ Until the plugin is in the community store, install it with
 1. Install and enable **BRAT** from Community plugins.
 2. Run the command **BRAT: Add a beta plugin for testing**.
 3. Paste `https://github.com/Tigertenzin/obsidian-daily-review` and confirm.
-4. Enable **Daily Review** under Community plugins.
+4. Enable **Periodic Note Review** under Community plugins.
 
 BRAT checks for new releases and updates the plugin for you.
 
