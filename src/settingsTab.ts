@@ -231,7 +231,22 @@ export class ReviewSettingTab extends PluginSettingTab {
 			.addToggle((t) => t.setValue(this.s.showStatusBar).onChange((v) => {
 				this.s.showStatusBar = v;
 				this.save(false);
+				this.display();
 			}));
+		if (this.s.showStatusBar) {
+			new Setting(el)
+				.setName("Status bar style")
+				.setDesc("Desktop only: Obsidian's phone and tablet apps have no status bar.")
+				.addDropdown((d) => d
+					.addOption("icon-text", "Icon and text (18 to review)")
+					.addOption("icon-number", "Icon and number (18)")
+					.addOption("text", "Text only")
+					.setValue(this.s.statusBarStyle)
+					.onChange((v) => {
+						this.s.statusBarStyle = v as typeof this.s.statusBarStyle;
+						this.save(false);
+					}));
+		}
 	}
 
 	private renderKind(el: HTMLElement, k: Kind) {

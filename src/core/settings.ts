@@ -73,6 +73,8 @@ export interface Settings {
 	allowCheckingItems: boolean;
 	useTasksPlugin: boolean;
 	showStatusBar: boolean;
+	/** How the status bar count looks: icon and text, icon and number, or text only. */
+	statusBarStyle: "icon-text" | "icon-number" | "text";
 	/** Remembered view state. */
 	showReviewed: boolean;
 	sort: SortMode;
@@ -129,6 +131,7 @@ export const DEFAULT_SETTINGS: Settings = {
 	allowCheckingItems: true,
 	useTasksPlugin: true,
 	showStatusBar: true,
+	statusBarStyle: "icon-text",
 	showReviewed: false,
 	sort: "oldest",
 };

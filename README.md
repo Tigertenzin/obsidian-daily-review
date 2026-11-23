@@ -64,6 +64,8 @@ has `reviewed: true`. Every part of that can be changed:
   checkboxes can be ticked from the page. Items carrying the task tag are toggled through
   the [Tasks](https://github.com/obsidian-tasks-group/obsidian-tasks) plugin when it's
   installed, so its done dates and recurrence apply.
+- **Status bar (desktop):** whether to show the count of notes to review, and whether it
+  reads "18 to review" with an icon, just the icon and number, or text only.
 
 ## Development
 

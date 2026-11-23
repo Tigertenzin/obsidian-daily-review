@@ -949,3 +949,18 @@
 .pnr-confirm p {
 	margin-top: 0;
 }
+
+/* ------------------------------------------------------------------ status bar */
+
+.pnr-status {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--size-4-1);
+}
+.pnr-status-icon {
+	display: inline-flex;
+}
+.pnr-status-icon svg {
+	width: var(--icon-xs, 14px);
+	height: var(--icon-xs, 14px);
+}

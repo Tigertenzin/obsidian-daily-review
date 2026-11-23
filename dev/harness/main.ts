@@ -6,7 +6,7 @@
  *   css=<name>                    also load dev/.local/themes/<name>.css (a community theme)
  */
 import { parse as parseYaml } from "yaml";
-import { Events, installDomHelpers, moment, Platform, Scope, TFile } from "./obsidian-mock";
+import { Events, installDomHelpers, moment, Platform, Scope, setIcon, TFile } from "./obsidian-mock";
 import { mergeSettings } from "../../src/core/settings";
 import { NoteStore } from "../../src/store";
 import { ReviewView } from "../../src/view";
@@ -152,7 +152,7 @@ if (device === "phone") {
 }
 
 const view = new ReviewView({ app, containerEl: leafContent }, plugin);
-(window as any).pnr = { view, store, settings, notes };
+(window as any).pnr = { view, store, settings, notes, setIcon };
 document.addEventListener("keydown", (e) => view.scope?.handle(e as KeyboardEvent));
 
 await store.rebuild();

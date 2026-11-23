@@ -1,4 +1,4 @@
-import { debounce, Plugin, WorkspaceLeaf } from "obsidian";
+import { debounce, Plugin, setIcon, WorkspaceLeaf } from "obsidian";
 import { isPast } from "./core/queue";
 import { mergeSettings, Settings } from "./core/settings";
 import { ReviewSettingTab } from "./settingsTab";
@@ -90,8 +90,11 @@ export default class PeriodicNoteReviewPlugin extends Plugin {
 		const n = [...this.store.entries.values()].filter((e) => e.needsReview && isPast(e, this.store.today)).length;
 		const show = this.settings.showStatusBar && this.store.ready && n > 0;
 		this.statusEl.toggle(show);
-		this.statusEl.setText(`${n} to review`);
-		this.statusEl.setAttr("aria-label", "Open daily review");
+		const style = this.settings.statusBarStyle;
+		this.statusEl.empty();
+		if (style !== "text") setIcon(this.statusEl.createSpan({ cls: "pnr-status-icon" }), "calendar-check");
+		this.statusEl.createSpan({ text: style === "icon-number" ? `${n}` : `${n} to review` });
+		this.statusEl.setAttr("aria-label", `${n} to review: open daily review`);
 	}
 
 	/** Save settings. With `rebuild`, re-read the notes (debounced while typing). */
