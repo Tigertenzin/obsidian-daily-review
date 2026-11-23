@@ -5,6 +5,7 @@ import {
 	HighlightStyle, ItemType, Kind, KINDS, MatchMode, MissingStatus, OTHER_ID, UnknownMarks,
 } from "./core/settings";
 import type PeriodicNoteReviewPlugin from "./main";
+import type { NoteStore } from "./store";
 
 const KIND_LABEL: Record<Kind, string> = {
 	daily: "Daily", weekly: "Weekly", monthly: "Monthly", quarterly: "Quarterly", yearly: "Yearly",
@@ -36,7 +37,7 @@ function countText(n: number): string {
 export class ReviewSettingTab extends PluginSettingTab {
 	private sharedFieldHints: { kind: Kind; el: HTMLElement; input?: HTMLInputElement }[] = [];
 	private formatPreviews: { kind: Kind; el: HTMLElement }[] = [];
-	private lastCounts: Record<Kind, number> | null = null;
+	private lastCounts: ReturnType<NoteStore["countByKind"]> | null = null;
 	private countTimer = 0;
 
 	constructor(app: App, private plugin: PeriodicNoteReviewPlugin) {
@@ -306,6 +307,20 @@ export class ReviewSettingTab extends PluginSettingTab {
 		}
 	}
 
+	private fillCount(el: HTMLElement, kind: Kind) {
+		if (!this.lastCounts) return;
+		el.empty();
+		el.createDiv({ text: countText(this.lastCounts.counts[kind]) });
+		const miss = this.lastCounts.misses[kind];
+		if (miss.count > 0) {
+			const tag = this.s.kinds[kind].tag;
+			const w = el.createDiv({ cls: "pnr-format-warn" });
+			w.appendText(`${miss.count} ${miss.count === 1 ? "note" : "notes"} tagged #${tag} don't fit this format, such as `);
+			w.createEl("code", { text: miss.example });
+			w.appendText(".");
+		}
+	}
+
 	/** Title format previews: today's title, how it's read, and how many notes match. */
 	private refreshPreviews() {
 		for (const p of this.formatPreviews) {
@@ -317,13 +332,15 @@ export class ReviewSettingTab extends PluginSettingTab {
 			line.createEl("code", { text: ex.title || "(empty)" });
 			if (ex.ok) p.el.createDiv({ text: `Read as ${ex.readAs}` });
 			else p.el.createDiv({ cls: "pnr-format-warn", text: "This title can't be read back as this period. Check the format." });
-			p.el.createDiv({ cls: "pnr-format-count", text: this.lastCounts ? countText(this.lastCounts[p.kind]) : "Counting notes…" });
+			const count = p.el.createDiv({ cls: "pnr-format-count", text: "Counting notes…" });
+			if (this.lastCounts) this.fillCount(count, p.kind);
 		}
 		window.clearTimeout(this.countTimer);
 		this.countTimer = window.setTimeout(() => {
 			this.lastCounts = this.plugin.store.countByKind(this.s);
 			for (const p of this.formatPreviews) {
-				p.el.querySelector(".pnr-format-count")?.setText(countText(this.lastCounts[p.kind]));
+				const el = p.el.querySelector<HTMLElement>(".pnr-format-count");
+				if (el) this.fillCount(el, p.kind);
 			}
 		}, 350);
 	}

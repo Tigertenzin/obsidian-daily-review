@@ -1,6 +1,6 @@
 import { App, Events, getAllTags, TAbstractFile, TFile } from "obsidian";
 import { analyzeNote } from "./core/parse";
-import { classifyNote, hasTag, todayString } from "./core/periods";
+import { classifyNote, hasTag, kindFromTags, todayString } from "./core/periods";
 import { NoteEntry } from "./core/queue";
 import { needsReview } from "./core/review";
 import { Kind, Settings } from "./core/settings";
@@ -111,9 +111,16 @@ export class NoteStore extends Events {
 		);
 	}
 
-	/** How many notes in the folder each kind would pick up with `settings`. */
-	countByKind(settings: Settings): Record<Kind, number> {
+	/**
+	 * How many notes in the folder each kind picks up with `settings`, and how many
+	 * notes carry a kind's tag but don't fit its title format (with one example title).
+	 */
+	countByKind(settings: Settings): { counts: Record<Kind, number>; misses: Record<Kind, { count: number; example: string }> } {
 		const counts = { daily: 0, weekly: 0, monthly: 0, quarterly: 0, yearly: 0 };
+		const misses = {
+			daily: { count: 0, example: "" }, weekly: { count: 0, example: "" }, monthly: { count: 0, example: "" },
+			quarterly: { count: 0, example: "" }, yearly: { count: 0, example: "" },
+		};
 		const folder = settings.folder.trim().replace(/^\/+|\/+$/g, "");
 		for (const file of this.app.vault.getMarkdownFiles()) {
 			if (folder && !file.path.startsWith(folder + "/")) continue;
@@ -122,9 +129,18 @@ export class NoteStore extends Events {
 			const tags = getAllTags(cache) ?? [];
 			if (settings.membershipTag.trim() && !hasTag(tags, settings.membershipTag)) continue;
 			const p = classifyNote(file.basename, tags, settings);
-			if (p) counts[p.kind]++;
+			if (p) {
+				counts[p.kind]++;
+				continue;
+			}
+			const tagged = kindFromTags(tags, settings);
+			if (tagged && settings.kinds[tagged].enabled) {
+				const m = misses[tagged];
+				m.count++;
+				if (!m.example || file.basename > m.example) m.example = file.basename;
+			}
 		}
-		return counts;
+		return { counts, misses };
 	}
 
 	/** Every section heading in the notes, with how many notes use it, most used first. */

@@ -155,3 +155,10 @@ describe("comments", () => {
 		expect(a.renderText).not.toContain("hidden");
 	});
 });
+
+describe("title heading", () => {
+	it("ignores punctuation when checking the H1 repeats the title", () => {
+		expect(analyzeNote("# 2026-11 (Nov)\n\ntext\n", "2026-11 Nov", S).renderText).not.toContain("2026-11");
+		expect(analyzeNote("# Something else\n\ntext\n", "2026-11 Nov", S).renderText).toContain("Something else");
+	});
+});

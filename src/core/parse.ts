@@ -210,7 +210,9 @@ export function analyzeNote(raw: string, title: string, settings: Settings): Not
 	// Title heading: the first H1, when it starts with the note's title
 	if (settings.hideTitleHeading) {
 		const h1 = headings.find((h) => h.level === 1);
-		if (h1 && h1.text.trim().toLowerCase().startsWith(title.trim().toLowerCase())) hidden[h1.line] = true;
+		// Compared on letters and digits only, so "2026-11 (Nov)" repeats "2026-11 Nov".
+		const key = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+		if (h1 && key(title) && key(h1.text).startsWith(key(title))) hidden[h1.line] = true;
 	}
 
 	// Navigation line
