@@ -21,7 +21,7 @@ marks the note reviewed once you've dealt with them.
   showing how many open items it has left, and of which types.
 - **Mark reviewed.** Sets the note's status field in its frontmatter, changing only that
   one line, and moves on to the next note. Press it twice (or Enter twice) to confirm:
-  the first press starts a short countdown on the button bar. An Undo bar appears for a
+  the first press starts a short countdown on the button. An Undo button appears for a
   few seconds afterwards.
 - **Check items off in place.** Click a checkbox on the page to check or uncheck it in
   the note.

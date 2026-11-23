@@ -402,49 +402,27 @@
 .pnr-actions-host:empty {
 	display: none;
 }
-.pnr-actions,
-.pnr-undo {
-	position: relative;
-	isolation: isolate;
-	overflow: hidden;
-	border-radius: var(--radius-l);
-	max-width: 100%;
-}
 .pnr-actions {
 	display: flex;
 	flex-wrap: wrap;
 	justify-content: center;
 	align-items: center;
 	gap: var(--size-4-2);
-	padding: var(--size-4-1);
-	border: 1px solid transparent;
+	max-width: 100%;
 }
-.pnr-actions.is-armed {
-	background: var(--background-primary);
-	border-color: var(--interactive-accent);
+/* Buttons that carry a countdown tint behind their label */
+.pnr-view button.pnr-has-timer {
+	position: relative;
+	isolation: isolate;
+	overflow: hidden;
 }
-.pnr-undo {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	justify-content: center;
-	gap: var(--size-4-2) var(--size-4-3);
-	padding: var(--size-4-1) var(--size-4-1) var(--size-4-1) var(--size-4-3);
-	background: var(--background-primary);
-	border: 1px solid var(--background-modifier-border);
-	box-shadow: var(--shadow-s);
-	font-size: var(--font-ui-small);
+.pnr-view button.pnr-mark.is-armed {
+	background: var(--interactive-normal);
+	color: var(--text-normal);
+	box-shadow: inset 0 0 0 1.5px var(--interactive-accent);
 }
-.pnr-undo-text {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	color: var(--text-muted);
-}
-.pnr-undo-text svg {
-	width: var(--icon-s);
-	height: var(--icon-s);
-	color: var(--color-green);
+.pnr-view button.pnr-undo-btn {
+	box-shadow: inset 0 0 0 1px var(--background-modifier-border), var(--shadow-s);
 }
 /* Countdown: a tint behind the bar that drains from right to left */
 .pnr-timer {
@@ -457,11 +435,11 @@
 	animation-fill-mode: forwards;
 	pointer-events: none;
 }
-.pnr-actions .pnr-timer {
-	background: color-mix(in srgb, var(--interactive-accent) 22%, transparent);
+.pnr-mark .pnr-timer {
+	background: color-mix(in srgb, var(--interactive-accent) 40%, transparent);
 }
-.pnr-undo .pnr-timer {
-	background: color-mix(in srgb, var(--color-green) 16%, transparent);
+.pnr-undo-btn .pnr-timer {
+	background: color-mix(in srgb, var(--interactive-accent) 25%, transparent);
 }
 @keyframes pnr-drain {
 	from {

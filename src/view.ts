@@ -596,12 +596,11 @@ export class ReviewView extends ItemView {
 
 		if (this.undo) {
 			const u = this.undo;
-			const strip = host.createDiv({ cls: "pnr-undo" });
-			this.addTimer(strip, UNDO_MS, u.until - now);
-			const text = strip.createDiv({ cls: "pnr-undo-text" });
-			setIcon(text.createSpan(), "check");
-			text.createSpan({ text: `Marked ${u.label} reviewed` });
-			const btn = strip.createEl("button", { cls: "pnr-btn pnr-undo-btn", attr: { "aria-label": "Undo (u)" } });
+			const btn = host.createEl("button", {
+				cls: "pnr-btn pnr-undo-btn pnr-has-timer",
+				attr: { "aria-label": `Undo: mark ${u.label} unreviewed (u)` },
+			});
+			this.addTimer(btn, UNDO_MS, u.until - now);
 			setIcon(btn.createSpan(), "undo-2");
 			btn.createSpan({ text: "Undo" });
 			btn.addEventListener("click", () => void this.undoLast());
@@ -610,10 +609,6 @@ export class ReviewView extends ItemView {
 
 		const bar = host.createDiv({ cls: "pnr-actions" });
 		const armed = this.armed?.path === e.path ? this.armed : null;
-		if (armed) {
-			bar.addClass("is-armed");
-			this.addTimer(bar, CONFIRM_MS, armed.until - now);
-		}
 
 		const prev = bar.createEl("button", { cls: "pnr-btn pnr-prev", attr: { "aria-label": "Previous note (←)" } });
 		setIcon(prev, "chevron-left");
@@ -631,7 +626,8 @@ export class ReviewView extends ItemView {
 			setIcon(mark.createSpan(), "rotate-ccw");
 			mark.createSpan({ text: "Mark unreviewed" });
 		} else if (armed) {
-			mark.addClass("mod-cta", "is-armed");
+			mark.addClass("is-armed", "pnr-has-timer");
+			this.addTimer(mark, CONFIRM_MS, armed.until - now);
 			setIcon(mark.createSpan(), "check-check");
 			mark.createSpan({ text: e.open > 0 ? `Confirm · ${e.open} still open` : "Confirm reviewed" });
 			mark.setAttr("aria-label", "Click or press Enter again to mark reviewed. Esc cancels.");
@@ -652,7 +648,7 @@ export class ReviewView extends ItemView {
 		next.addEventListener("click", () => this.step(1));
 	}
 
-	/** A tint across `el` that drains right to left over `total` ms, `left` ms of it remaining. */
+	/** A tint behind `el` that drains right to left over `total` ms, `left` ms of it remaining. */
 	private addTimer(el: HTMLElement, total: number, left: number) {
 		const t = el.createDiv({ cls: "pnr-timer" });
 		t.style.animationDuration = `${total}ms`;
