@@ -597,7 +597,7 @@ export class ReviewView extends ItemView {
 		if (this.undo) {
 			const u = this.undo;
 			const btn = host.createEl("button", {
-				cls: "pnr-btn pnr-undo-btn pnr-has-timer",
+				cls: "pnr-btn pnr-undo-btn",
 				attr: { "aria-label": `Undo: mark ${u.label} unreviewed (u)` },
 			});
 			this.addTimer(btn, UNDO_MS, u.until - now);
@@ -626,7 +626,7 @@ export class ReviewView extends ItemView {
 			setIcon(mark.createSpan(), "rotate-ccw");
 			mark.createSpan({ text: "Mark unreviewed" });
 		} else if (armed) {
-			mark.addClass("is-armed", "pnr-has-timer");
+			mark.addClass("is-armed");
 			this.addTimer(mark, CONFIRM_MS, armed.until - now);
 			setIcon(mark.createSpan(), "check-check");
 			mark.createSpan({ text: e.open > 0 ? `Confirm · ${e.open} still open` : "Confirm reviewed" });
@@ -650,9 +650,11 @@ export class ReviewView extends ItemView {
 
 	/** A tint behind `el` that drains right to left over `total` ms, `left` ms of it remaining. */
 	private addTimer(el: HTMLElement, total: number, left: number) {
-		const t = el.createDiv({ cls: "pnr-timer" });
-		t.style.animationDuration = `${total}ms`;
-		t.style.animationDelay = `-${Math.max(0, total - left)}ms`;
+		// Drawn as part of the button's own background (no overlay element): WebKit
+		// stopped painting the whole button when an animated layer sat behind its label.
+		el.addClass("pnr-has-timer");
+		el.style.setProperty("--pnr-timer-duration", `${total}ms`);
+		el.style.setProperty("--pnr-timer-delay", `-${Math.max(0, total - left)}ms`);
 	}
 
 	private arm(path: string) {

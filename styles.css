@@ -410,12 +410,6 @@
 	gap: var(--size-4-2);
 	max-width: 100%;
 }
-/* Buttons that carry a countdown tint behind their label */
-.pnr-view button.pnr-has-timer {
-	position: relative;
-	isolation: isolate;
-	overflow: hidden;
-}
 .pnr-view button.pnr-mark.is-armed {
 	background: var(--interactive-normal);
 	color: var(--text-normal);
@@ -424,29 +418,26 @@
 .pnr-view button.pnr-undo-btn {
 	box-shadow: inset 0 0 0 1px var(--background-modifier-border), var(--shadow-s);
 }
-/* Countdown: a tint behind the bar that drains from right to left */
-.pnr-timer {
-	position: absolute;
-	inset: 0;
-	z-index: -1;
-	transform-origin: left center;
-	animation-name: pnr-drain;
-	animation-timing-function: linear;
-	animation-fill-mode: forwards;
-	pointer-events: none;
+/* Countdown: a band of colour in the button's background that shrinks from the right */
+.pnr-view button.pnr-has-timer {
+	background-image: linear-gradient(var(--pnr-timer-color), var(--pnr-timer-color));
+	background-repeat: no-repeat;
+	background-position: left center;
+	background-size: 100% 100%;
+	animation: pnr-drain var(--pnr-timer-duration, 4s) linear var(--pnr-timer-delay, 0s) forwards;
 }
-.pnr-mark .pnr-timer {
-	background: color-mix(in srgb, var(--interactive-accent) 40%, transparent);
+.pnr-view button.pnr-mark {
+	--pnr-timer-color: color-mix(in srgb, var(--interactive-accent) 40%, transparent);
 }
-.pnr-undo-btn .pnr-timer {
-	background: color-mix(in srgb, var(--interactive-accent) 25%, transparent);
+.pnr-view button.pnr-undo-btn {
+	--pnr-timer-color: color-mix(in srgb, var(--interactive-accent) 25%, transparent);
 }
 @keyframes pnr-drain {
 	from {
-		transform: scaleX(1);
+		background-size: 100% 100%;
 	}
 	to {
-		transform: scaleX(0);
+		background-size: 0% 100%;
 	}
 }
 .pnr-view button.pnr-btn {
