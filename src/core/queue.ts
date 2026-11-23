@@ -15,16 +15,41 @@ export interface NoteEntry extends Period {
 
 export type FilterId = "all" | "weekdays" | "weekends" | Exclude<Kind, "daily"> | "old";
 
+/** Kind chips shown in the top bar (the other filter ids remain available to code). */
 export const FILTERS: { id: FilterId; label: string }[] = [
 	{ id: "all", label: "All" },
-	{ id: "weekdays", label: "Weekdays" },
-	{ id: "weekends", label: "Weekends" },
 	{ id: "weekly", label: "Weekly" },
 	{ id: "monthly", label: "Monthly" },
 	{ id: "quarterly", label: "Quarterly" },
 	{ id: "yearly", label: "Yearly" },
-	{ id: "old", label: "7+ days old" },
 ];
+
+/** A type pill's state: show only notes with this type open, or hide notes with only it left. */
+export type TypeFilterState = "include" | "exclude";
+
+/**
+ * Type pills. With any "include" pills, a note must have at least one of those types
+ * open. With "exclude" pills, a note whose open items are all of excluded types is
+ * hidden. Notes with nothing open are only hidden by "include".
+ */
+export function matchesTypeFilter(e: NoteEntry, filter: Map<string, TypeFilterState>): boolean {
+	if (filter.size === 0) return true;
+	const open = Object.keys(e.counts).filter((id) => e.counts[id].open + e.counts[id].tasks > 0);
+	const include = [...filter].filter(([, v]) => v === "include").map(([k]) => k);
+	const exclude = [...filter].filter(([, v]) => v === "exclude").map(([k]) => k);
+	if (include.length > 0 && !open.some((id) => include.includes(id))) return false;
+	if (exclude.length > 0 && open.length > 0 && open.every((id) => exclude.includes(id))) return false;
+	return true;
+}
+
+/** Open items (plain and tasks) per type across `entries`. */
+export function openByType(entries: NoteEntry[]): Record<string, number> {
+	const out: Record<string, number> = {};
+	for (const e of entries) {
+		for (const [id, c] of Object.entries(e.counts)) out[id] = (out[id] ?? 0) + c.open + c.tasks;
+	}
+	return out;
+}
 
 export function isPast(e: NoteEntry, today: string): boolean {
 	return daysAgo(e.anchor, today) > 0;

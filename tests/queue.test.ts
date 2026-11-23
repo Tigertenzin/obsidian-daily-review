@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { moment } from "obsidian";
-import { describeFormat, longAge, NoteEntry, rangeLabel, shortAge, sortEntries, ticksFor } from "../src/core/queue";
+import { describeFormat, longAge, matchesTypeFilter, NoteEntry, openByType, rangeLabel, shortAge, sortEntries, ticksFor, TypeFilterState } from "../src/core/queue";
 import { example } from "./fixtures";
 
 const S = example();
@@ -42,5 +42,25 @@ describe("describeFormat", () => {
 		expect(describeFormat("weekly", "YYYY", now).ok).toBe(false);
 		expect(describeFormat("daily", "YYYY-MM", now).ok).toBe(false);
 		expect(describeFormat("daily", "", now).ok).toBe(false);
+	});
+});
+
+describe("type pills", () => {
+	const both = entry({ counts: { work: { open: 1, tasks: 0 }, fun: { open: 0, tasks: 1 } } });
+	const workOnly = entry({ counts: { work: { open: 2, tasks: 0 } } });
+	const clear = entry({});
+	const f = (pairs: [string, TypeFilterState][]) => new Map(pairs);
+	it("include shows only notes with that type open", () => {
+		const m = f([["work", "include"]]);
+		expect([both, workOnly, clear].map((e) => matchesTypeFilter(e, m))).toEqual([true, true, false]);
+		expect(matchesTypeFilter(both, f([["fun", "include"]]))).toBe(true);
+		expect(matchesTypeFilter(workOnly, f([["fun", "include"]]))).toBe(false);
+	});
+	it("exclude hides notes with only that type left", () => {
+		const m = f([["work", "exclude"]]);
+		expect([both, workOnly, clear].map((e) => matchesTypeFilter(e, m))).toEqual([true, false, true]);
+	});
+	it("open counts per type", () => {
+		expect(openByType([both, workOnly])).toEqual({ work: 3, fun: 1 });
 	});
 });

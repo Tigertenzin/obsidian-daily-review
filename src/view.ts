@@ -7,11 +7,12 @@ import {
 } from "./core/parse";
 import { daysAgo } from "./core/periods";
 import {
-	FILTERS, FilterId, groupLabel, isPast, longAge, mastheadFor, matchesFilter, NoteEntry, rangeLabel,
+	FILTERS, FilterId, groupLabel, isPast, longAge, mastheadFor, matchesFilter, matchesTypeFilter, NoteEntry,
+	openByType, rangeLabel, TypeFilterState,
 	shortAge, sortEntries, ticksFor, weekNumber,
 } from "./core/queue";
 import { reviewedValueFor, statusFieldFor, unreviewedValueFor, withFrontmatterValue } from "./core/review";
-import { OTHER_ID, SortMode } from "./core/settings";
+import { Kind, OTHER_ID, SortMode } from "./core/settings";
 import type PeriodicNoteReviewPlugin from "./main";
 
 export const VIEW_TYPE = "periodic-note-review";
@@ -32,7 +33,7 @@ interface TasksApi {
 export class ReviewView extends ItemView {
 	private currentPath: string | null = null;
 	private filter: FilterId = "all";
-	private sitting = 0;
+	private typeFilter = new Map<string, TypeFilterState>();
 	private queueOpen = false;
 	private busy = false;
 
@@ -109,7 +110,7 @@ export class ReviewView extends ItemView {
 	private visible(): NoteEntry[] {
 		const today = this.store.today;
 		return sortEntries(
-			this.listed().filter((e) => matchesFilter(e, this.filter, today)),
+			this.listed().filter((e) => matchesFilter(e, this.filter, today) && matchesTypeFilter(e, this.typeFilter)),
 			this.settings.sort,
 		);
 	}
@@ -226,21 +227,18 @@ export class ReviewView extends ItemView {
 		const el = this.topEl;
 		el.empty();
 		const n = this.toReview().length;
-		const m = this.sitting;
+		const today = this.store.today;
 
 		const tally = el.createDiv({ cls: "pnr-tally" });
 		tally.createSpan({ cls: "pnr-tally-count", text: `${n} to review` });
-		if (m > 0) tally.createSpan({ cls: "pnr-tally-sitting", text: `${m} reviewed this sitting` });
-		if (m > 0) {
-			const bar = tally.createDiv({ cls: "pnr-progress" });
-			bar.createDiv({ cls: "pnr-progress-fill" }).style.width = `${(100 * m) / (n + m)}%`;
-		}
+		this.renderTypePills(tally);
 
 		const controls = el.createDiv({ cls: "pnr-controls" });
 		const chips = controls.createDiv({ cls: "pnr-chips" });
-		const listed = this.listed();
+		const listed = this.listed().filter((e) => matchesTypeFilter(e, this.typeFilter));
 		for (const f of FILTERS) {
-			const count = listed.filter((e) => matchesFilter(e, f.id, this.store.today)).length;
+			if (f.id !== "all" && !this.settings.kinds[f.id as Kind]?.enabled && this.filter !== f.id) continue;
+			const count = listed.filter((e) => matchesFilter(e, f.id, today)).length;
 			if (count === 0 && this.filter !== f.id) continue;
 			const chip = chips.createEl("button", { cls: "pnr-chip" });
 			chip.toggleClass("is-active", this.filter === f.id);
@@ -248,11 +246,7 @@ export class ReviewView extends ItemView {
 			chip.createSpan({ cls: "pnr-chip-count", text: String(count) });
 			chip.addEventListener("click", () => {
 				this.filter = f.id;
-				const vis = this.visible();
-				if (!vis.some((e) => e.path === this.currentPath)) {
-					this.currentPath = (vis.find((e) => e.needsReview && isPast(e, this.store.today)) ?? vis[0])?.path ?? null;
-				}
-				this.renderAll();
+				this.afterFilterChange();
 			});
 		}
 
@@ -271,6 +265,47 @@ export class ReviewView extends ItemView {
 		setIcon(qBtn.createSpan(), "list");
 		qBtn.createSpan({ text: `Queue ${this.visible().length}` });
 		qBtn.addEventListener("click", () => this.setQueueOpen(!this.queueOpen));
+	}
+
+	/** One pill per item type with open items: a coloured dot and the count left. */
+	private renderTypePills(parent: HTMLElement) {
+		const today = this.store.today;
+		const pool = this.listed().filter((e) => e.needsReview && matchesFilter(e, this.filter, today));
+		const totals = openByType(pool);
+		const pills = parent.createDiv({ cls: "pnr-type-pills" });
+		for (const id of this.typeOrder()) {
+			if (id === OTHER_ID && this.settings.other.hidden) continue;
+			const state = this.typeFilter.get(id);
+			const count = totals[id] ?? 0;
+			if (count === 0 && !state) continue;
+			const label = this.labelFor(id);
+			const pill = pills.createEl("button", { cls: "pnr-type-pill" });
+			pill.style.setProperty("--pnr-color", this.colorFor(id));
+			if (state) pill.addClass(`is-${state}`);
+			pill.createSpan({ cls: "pnr-type-dot" });
+			pill.createSpan({ cls: "pnr-type-pill-label", text: label });
+			pill.createSpan({ cls: "pnr-type-pill-count", text: String(count) });
+			pill.setAttr("aria-label",
+				state === "include" ? `Showing only notes with ${label} open. Click to hide notes with only ${label} left.`
+				: state === "exclude" ? `Hiding notes with only ${label} left. Click to show everything.`
+				: `${count} ${label} open. Click to show only notes with ${label} open.`);
+			pill.setAttr("aria-pressed", state ? "true" : "false");
+			pill.addEventListener("click", () => {
+				if (!state) this.typeFilter.set(id, "include");
+				else if (state === "include") this.typeFilter.set(id, "exclude");
+				else this.typeFilter.delete(id);
+				this.afterFilterChange();
+			});
+		}
+	}
+
+	/** Keep the current note if it's still listed; otherwise go to the first one to review. */
+	private afterFilterChange() {
+		const vis = this.visible();
+		if (!vis.some((e) => e.path === this.currentPath)) {
+			this.currentPath = (vis.find((e) => e.needsReview && isPast(e, this.store.today)) ?? vis[0])?.path ?? null;
+		}
+		this.renderAll();
 	}
 
 	// ---------------------------------------------------------------- queue
@@ -586,12 +621,17 @@ export class ReviewView extends ItemView {
 			box.createDiv({ cls: "pnr-empty-title", text: "Desk clear" });
 			box.createDiv({ text: "Every past note is reviewed." });
 		} else if (pastInFilter.length === 0) {
-			box.createDiv({ cls: "pnr-empty-title", text: "Nothing to review in this filter" });
-			box.createDiv({ text: `${pastAll.length} to review under All.` });
+			box.createDiv({ cls: "pnr-empty-title", text: "Nothing to review with these filters" });
+			box.createDiv({ text: `${pastAll.length} to review in total.` });
+			const clear = box.createDiv().createEl("button", { text: "Clear filters" });
+			clear.addEventListener("click", () => {
+				this.filter = "all";
+				this.typeFilter.clear();
+				this.afterFilterChange();
+			});
 		} else {
 			box.createDiv({ cls: "pnr-empty-title", text: "Pick a note from the queue" });
 		}
-		if (this.sitting > 0) box.createDiv({ text: `${this.sitting} reviewed this sitting.` });
 		const inProgress = [...this.store.entries.values()].filter((e) => e.needsReview && !isPast(e, today)).length;
 		if (inProgress > 0) {
 			box.createDiv({
@@ -790,7 +830,6 @@ export class ReviewView extends ItemView {
 			const field = statusFieldFor(e.kind, this.settings);
 			const value = reviewedValueFor(e.kind, this.settings);
 			await this.app.vault.process(file, (raw) => withFrontmatterValue(raw, field, value));
-			this.sitting++;
 			await this.stamp();
 			this.store.setNeedsReview(e.path, false);
 			if (this.settings.showReviewed) this.goToNextAfter(e, index + 1);
@@ -809,7 +848,6 @@ export class ReviewView extends ItemView {
 		if (!e || !file || e.needsReview || !this.settings.kinds[e.kind].canMarkReviewed) return;
 		const field = statusFieldFor(e.kind, this.settings);
 		await this.app.vault.process(file, (raw) => withFrontmatterValue(raw, field, unreviewedValueFor(e.kind, this.settings)));
-		if (this.sitting > 0) this.sitting--;
 		this.store.setNeedsReview(e.path, true);
 	}
 
