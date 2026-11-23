@@ -6,7 +6,7 @@ import {
 } from "./core/parse";
 import { daysAgo } from "./core/periods";
 import {
-	FILTERS, FilterId, groupLabel, isPast, longAge, mastheadFor, matchesFilter, matchesTypeFilter, NoteEntry,
+	FILTERS, FilterId, groupLabel, isFuture, isPast, longAge, mastheadFor, matchesFilter, matchesTypeFilter, NoteEntry,
 	openByType, rangeLabel, TypeFilterState,
 	shortAge, sortEntries, ticksFor, weekNumber,
 } from "./core/queue";
@@ -61,8 +61,12 @@ export class ReviewView extends ItemView {
 	private itemEls: HTMLElement[] = [];
 	private itemsMatched = false;
 
+	/** Whether future notes are unfolded in the queue; starts from the setting. */
+	private showFuture: boolean;
+
 	constructor(leaf: WorkspaceLeaf, private plugin: PeriodicNoteReviewPlugin) {
 		super(leaf);
+		this.showFuture = plugin.settings.showFuture;
 		this.scope = new Scope(this.app.scope);
 		this.registerKeys(this.scope);
 	}
@@ -124,16 +128,20 @@ export class ReviewView extends ItemView {
 
 	// ---------------------------------------------------------------- data
 
-	/** Notes listed in the queue: still to review (plus reviewed ones if shown). */
-	private listed(): NoteEntry[] {
-		return [...this.store.entries.values()].filter((e) => e.needsReview || this.settings.showReviewed);
+	/** Notes listed in the queue: still to review (plus reviewed ones if shown), and
+	 *  future ones only while they're unfolded. Counts at the top follow the same list. */
+	private listed(withFuture = this.showFuture): NoteEntry[] {
+		const today = this.store.today;
+		return [...this.store.entries.values()].filter((e) =>
+			(e.needsReview || this.settings.showReviewed) && (withFuture || !isFuture(e, today)));
 	}
 
-	/** The queue in its current filter and sort. */
-	private visible(): NoteEntry[] {
+	/** The queue in its current filter and sort, future notes included or not. */
+	private visible(withFuture = this.showFuture): NoteEntry[] {
 		const today = this.store.today;
 		return sortEntries(
-			this.listed().filter((e) => matchesFilter(e, this.filter, today) && matchesTypeFilter(e, this.typeFilter)),
+			this.listed(withFuture).filter((e) =>
+				matchesFilter(e, this.filter, today) && matchesTypeFilter(e, this.typeFilter)),
 			this.settings.sort,
 		);
 	}
@@ -508,15 +516,30 @@ export class ReviewView extends ItemView {
 		close.addEventListener("click", () => this.setQueueOpen(false));
 
 		const list = el.createDiv({ cls: "pnr-queue-list" });
-		const vis = this.visible();
 		const today = this.store.today;
+		const all = this.visible(true);
+		const current = all.filter((e) => !isFuture(e, today));
+		const future = all.filter((e) => isFuture(e, today));
 		const dateSort = this.settings.sort === "oldest" || this.settings.sort === "newest";
 		let lastGroup = "";
 		let lastPast: boolean | null = null;
 
-		if (vis.length === 0) list.createDiv({ cls: "pnr-queue-empty", text: "Nothing here." });
+		if (current.length === 0 && future.length === 0) list.createDiv({ cls: "pnr-queue-empty", text: "Nothing here." });
 
-		for (const e of vis) {
+		// Future notes fold away behind an "Upcoming" chevron: at the end, or at the top
+		// when the newest come first.
+		const shownFuture = this.showFuture ? future : [];
+		const toggle = future.length > 0 ? [null] : [];
+		const order: (NoteEntry | null)[] = this.settings.sort === "newest"
+			? [...toggle, ...shownFuture, ...current]
+			: [...current, ...toggle, ...shownFuture];
+
+		for (const e of order) {
+			if (e === null) {
+				this.renderFutureToggle(list, future.length);
+				lastGroup = "";
+				continue;
+			}
 			const past = isPast(e, today);
 			if (dateSort) {
 				if (lastPast !== null && past !== lastPast) list.createDiv({ cls: "pnr-today-divider", text: "today" });
@@ -532,6 +555,27 @@ export class ReviewView extends ItemView {
 
 		list.scrollTop = prevScroll;
 		window.requestAnimationFrame(() => this.revealCurrentRow());
+	}
+
+	private renderFutureToggle(list: HTMLElement, count: number) {
+		const btn = list.createDiv({ cls: "pnr-future-toggle", attr: { role: "button", tabindex: "0" } });
+		btn.toggleClass("is-open", this.showFuture);
+		btn.setAttr("aria-expanded", this.showFuture ? "true" : "false");
+		setIcon(btn.createSpan({ cls: "pnr-future-chevron" }), "chevron-right");
+		btn.createSpan({ text: "Upcoming" });
+		btn.createSpan({ cls: "pnr-future-count", text: `${count}` });
+		const flip = () => {
+			this.showFuture = !this.showFuture;
+			this.afterFilterChange();
+		};
+		btn.addEventListener("click", flip);
+		btn.addEventListener("keydown", (evt) => {
+			if (evt.key === "Enter" || evt.key === " ") {
+				evt.preventDefault();
+				evt.stopPropagation();
+				flip();
+			}
+		});
 	}
 
 	private renderRow(list: HTMLElement, e: NoteEntry, today: string): HTMLElement {
@@ -569,6 +613,7 @@ export class ReviewView extends ItemView {
 				break;
 		}
 
+		row.createSpan({ cls: "pnr-row-leader" });
 		const ticks = row.createDiv({ cls: "pnr-ticks" });
 		const all = ticksFor(e, this.settings);
 		if (!e.needsReview) {

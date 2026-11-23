@@ -73,6 +73,9 @@ daily(9, "## Work Log\n- [ ] Draft the project plan #task\n## Fun Stuff\n- [ ] P
 daily(12, "## Media\n- [ ] [Old bookmark](https://example.com/old)\n");
 daily(0, "## Fun Stuff\n- [ ] Something for today\n");
 daily(4, "## Fun Stuff\n- [x] Done already\n", true);
+// Notes made ahead of time: folded away under "Upcoming" by default.
+daily(-1, "## Work Log\n- [ ] Prepare for tomorrow's review #task\n");
+daily(-3, "## Fun Stuff\n- [ ] Dinner with friends\n");
 const lastWeek = today.clone().subtract(7, "days");
 notes[`Journal/${lastWeek.format("GGGG-[W]WW")}.md`] =
 	`---\ntags: [journal, weekly]\nreviewed: false\n---\n# ${lastWeek.format("GGGG-[W]WW")} ( notes )\n\n## Daily Notes\n- [ ] Check the mail #task\n- [x] Pay rent #task\n`;

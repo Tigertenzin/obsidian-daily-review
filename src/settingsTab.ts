@@ -213,6 +213,13 @@ export class ReviewSettingTab extends PluginSettingTab {
 				this.save();
 			}));
 		new Setting(el)
+			.setName("Show future notes in the queue")
+			.setDesc("Notes for days and periods that haven't started yet. When off, they're folded away under \"Upcoming\" at the end of the queue, and the chevron there shows them.")
+			.addToggle((t) => t.setValue(this.s.showFuture).onChange((v) => {
+				this.s.showFuture = v;
+				this.save(false);
+			}));
+		new Setting(el)
 			.setName("Check items off from the page")
 			.setDesc("Clicking a checkbox on the page checks or unchecks it in the note.")
 			.addToggle((t) => t.setValue(this.s.allowCheckingItems).onChange((v) => {

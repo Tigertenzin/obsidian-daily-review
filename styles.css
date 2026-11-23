@@ -181,7 +181,6 @@
 	color: var(--text-normal);
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-l);
-	box-shadow: var(--shadow-s);
 	padding: var(--size-4-8) var(--size-4-12) var(--size-4-12);
 	overflow-wrap: anywhere;
 	font-family: var(--font-text);
@@ -430,7 +429,6 @@
 	border: 1px solid var(--background-modifier-border);
 	/* Concentric with the buttons' corners, so the bar's edge never cuts into them */
 	border-radius: calc(var(--pnr-btn-radius) + var(--pnr-bar-pad));
-	box-shadow: var(--shadow-s);
 }
 .pnr-view button.pnr-mark.is-armed {
 	/* background-color, not the background shorthand: that would wipe out the countdown */
@@ -439,7 +437,7 @@
 	box-shadow: inset 0 0 0 1.5px var(--interactive-accent);
 }
 .pnr-view button.pnr-undo-btn {
-	box-shadow: inset 0 0 0 1px var(--background-modifier-border), var(--shadow-s);
+	box-shadow: inset 0 0 0 1px var(--background-modifier-border);
 }
 /* Countdown: a band of colour in the button's background that shrinks from the right */
 .pnr-view button.pnr-has-timer {
@@ -617,7 +615,7 @@
 }
 .pnr-row {
 	display: grid;
-	grid-template-columns: minmax(38px, max-content) minmax(0, 1fr) auto;
+	grid-template-columns: minmax(38px, max-content) minmax(var(--size-4-3), 1fr) auto auto;
 	align-items: center;
 	gap: var(--size-4-2);
 	padding: 5px var(--size-4-2);
@@ -672,9 +670,18 @@
 	color: var(--text-muted);
 	white-space: nowrap;
 }
+/* Dotted line from the date out to the open items, like a contents page */
+.pnr-row-leader {
+	align-self: center;
+	height: 0;
+	border-bottom: 2px dotted var(--background-modifier-border-hover, var(--text-faint));
+	opacity: 0.8;
+	transform: translateY(3px);
+}
 .pnr-ticks {
 	display: flex;
-	flex-wrap: wrap;
+	flex-wrap: nowrap;
+	justify-content: flex-end;
 	align-items: center;
 	gap: 3px;
 	min-width: 0;
@@ -963,4 +970,45 @@
 .pnr-status-icon svg {
 	width: var(--icon-xs, 14px);
 	height: var(--icon-xs, 14px);
+}
+
+/* ------------------------------------------------------------------ upcoming (future notes) */
+
+.pnr-future-toggle {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	margin: var(--size-4-2) 0 var(--size-4-1);
+	padding: 5px var(--size-4-2);
+	border-radius: var(--radius-m);
+	font-size: var(--font-ui-smaller);
+	font-weight: var(--font-semibold);
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	cursor: pointer;
+}
+.pnr-future-toggle:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+.pnr-future-toggle:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: -2px;
+}
+.pnr-future-chevron {
+	display: inline-flex;
+	transition: transform 0.15s ease;
+}
+.pnr-future-chevron svg {
+	width: var(--icon-xs, 14px);
+	height: var(--icon-xs, 14px);
+}
+.pnr-future-toggle.is-open .pnr-future-chevron {
+	transform: rotate(90deg);
+}
+.pnr-future-count {
+	margin-inline-start: auto;
+	font-variant-numeric: tabular-nums;
+	font-weight: normal;
 }

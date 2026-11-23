@@ -55,6 +55,11 @@ export function isPast(e: NoteEntry, today: string): boolean {
 	return daysAgo(e.anchor, today) > 0;
 }
 
+/** A note for a period that hasn't started yet (today's note and the current week aren't). */
+export function isFuture(e: NoteEntry, today: string): boolean {
+	return e.start > today;
+}
+
 export function matchesFilter(e: NoteEntry, f: FilterId, today: string): boolean {
 	switch (f) {
 		case "all":

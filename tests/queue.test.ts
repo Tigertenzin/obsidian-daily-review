@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { moment } from "obsidian";
-import { describeFormat, longAge, matchesTypeFilter, NoteEntry, openByType, rangeLabel, shortAge, sortEntries, ticksFor, TypeFilterState } from "../src/core/queue";
+import { describeFormat, isFuture, longAge, matchesTypeFilter, NoteEntry, openByType, rangeLabel, shortAge, sortEntries, ticksFor, TypeFilterState } from "../src/core/queue";
 import { example } from "./fixtures";
 
 const S = example();
@@ -10,6 +10,13 @@ function entry(p: Partial<NoteEntry>): NoteEntry {
 }
 
 describe("queue", () => {
+	it("counts only periods that haven't started as future", () => {
+		const today = "2026-11-23";
+		expect(isFuture(entry({ start: "2026-11-23", end: "2026-11-23" }), today)).toBe(false);
+		expect(isFuture(entry({ start: "2026-11-24", end: "2026-11-24" }), today)).toBe(true);
+		expect(isFuture(entry({ kind: "weekly", start: "2026-11-23", end: "2026-11-29" }), today)).toBe(false);
+		expect(isFuture(entry({ kind: "monthly", start: "2026-12-01", end: "2026-12-31" }), today)).toBe(true);
+	});
 	it("sorts by anchor, then kind", () => {
 		const d = entry({ title: "d", anchor: "2026-11-22" });
 		const w = entry({ title: "w", kind: "weekly", anchor: "2026-11-22" });

@@ -18,7 +18,8 @@ marks the note reviewed once you've dealt with them.
   its own colour. An item's type comes from the section heading it sits under, so for
   example everything under a "Work" heading counts as Work.
 - **A queue at a glance.** The notes still to review are listed beside the page, each
-  showing how many open items it has left, and of which types.
+  showing how many open items it has left, and of which types. Notes for days that
+  haven't come yet fold away under "Upcoming" (a setting decides whether they start open).
 - **Mark reviewed.** Sets the note's status field in its frontmatter, changing only that
   one line, and moves on to the next note. Press it twice (or Enter twice) to confirm:
   the first press starts a short countdown on the button. An Undo button appears for a

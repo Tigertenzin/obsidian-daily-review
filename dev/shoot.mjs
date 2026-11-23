@@ -74,6 +74,23 @@ const states = [
 		});
 		await p.waitForTimeout(400);
 	} },
+	// The queue, with the future notes under "Upcoming" unfolded.
+	{ name: "upcoming", run: async (p) => {
+		if (await p.$(".pnr-view.is-narrow")) await p.click(".pnr-queue-toggle");
+		await p.waitForTimeout(250);
+		await p.click(".pnr-future-toggle");
+		await p.waitForTimeout(300);
+	} },
+	// The same note scrolled part way, so the page passes under the top bar.
+	{ name: "scrolled", run: async (p) => {
+		await p.evaluate(() => {
+			const all = [...window.pnr.store.entries.values()].sort((a, b) => b.open - a.open);
+			window.pnr.view.goTo(all[0].path);
+		});
+		await p.waitForTimeout(400);
+		await p.evaluate(() => { document.querySelector(".pnr-main").scrollTop = 150; });
+		await p.waitForTimeout(200);
+	} },
 ];
 
 const filter = process.argv[2] ?? "";

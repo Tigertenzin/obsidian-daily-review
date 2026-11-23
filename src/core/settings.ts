@@ -77,6 +77,8 @@ export interface Settings {
 	statusBarStyle: "icon-text" | "icon-number" | "text";
 	/** Remembered view state. */
 	showReviewed: boolean;
+	/** Whether notes for periods that haven't started are listed when the review opens. */
+	showFuture: boolean;
 	sort: SortMode;
 }
 
@@ -133,6 +135,7 @@ export const DEFAULT_SETTINGS: Settings = {
 	showStatusBar: true,
 	statusBarStyle: "icon-text",
 	showReviewed: false,
+	showFuture: false,
 	sort: "oldest",
 };
 
