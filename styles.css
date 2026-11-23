@@ -21,6 +21,8 @@
 /* ------------------------------------------------------------------ top bar */
 
 .pnr-top {
+	position: relative;
+	z-index: 20;
 	flex: 0 0 auto;
 	display: flex;
 	flex-direction: column;
@@ -106,10 +108,12 @@
 	color: var(--text-muted);
 	white-space: nowrap;
 }
+/* Not filled with the accent: some themes restyle button backgrounds, and white
+   accent text then disappears. A tint plus an accent border reads in any theme. */
 .pnr-view button.pnr-chip.is-active {
-	background: var(--interactive-accent);
+	background-color: color-mix(in srgb, var(--interactive-accent) 18%, var(--background-primary));
 	border-color: var(--interactive-accent);
-	color: var(--text-on-accent);
+	color: var(--text-normal);
 }
 .pnr-chip-count {
 	margin-inline-start: 5px;
@@ -389,6 +393,7 @@
 .pnr-actions-host {
 	position: sticky;
 	bottom: 0;
+	/* --pnr-bottom-inset: room for Obsidian's floating navigation bar on phones */
 	z-index: 2;
 	max-width: calc(var(--file-line-width, 700px) + 2 * var(--size-4-12));
 	margin: 0 auto;
@@ -396,22 +401,32 @@
 	flex-direction: column;
 	align-items: center;
 	gap: var(--size-4-2);
-	padding: var(--size-4-4) 0 calc(var(--size-4-4) + env(safe-area-inset-bottom, 0px));
-	background: linear-gradient(to bottom, transparent, var(--background-secondary) 35%);
+	padding: var(--size-4-4) 0 calc(var(--size-4-3) + max(var(--pnr-bottom-inset, 0px), env(safe-area-inset-bottom, 0px)));
+	pointer-events: none;
+}
+.pnr-actions-host > * {
+	pointer-events: auto;
 }
 .pnr-actions-host:empty {
 	display: none;
 }
+/* The buttons sit on their own floating bar, so note text never shows through them. */
 .pnr-actions {
 	display: flex;
-	flex-wrap: wrap;
+	flex-wrap: nowrap;
 	justify-content: center;
 	align-items: center;
 	gap: var(--size-4-2);
 	max-width: 100%;
+	padding: var(--size-4-1);
+	background-color: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-xl, 16px);
+	box-shadow: var(--shadow-s);
 }
 .pnr-view button.pnr-mark.is-armed {
-	background: var(--interactive-normal);
+	/* background-color, not the background shorthand: that would wipe out the countdown */
+	background-color: var(--interactive-normal);
 	color: var(--text-normal);
 	box-shadow: inset 0 0 0 1.5px var(--interactive-accent);
 }
@@ -449,6 +464,20 @@
 .pnr-view button.pnr-mark {
 	min-width: 9em;
 	justify-content: center;
+	flex: 0 1 auto;
+	overflow: hidden;
+}
+.pnr-view button.pnr-mark > span:last-child {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.pnr-view.is-narrow button.pnr-mark {
+	min-width: 0;
+	flex: 1 1 auto;
+	max-width: 16em;
+}
+.pnr-view.is-narrow .pnr-btn-label {
+	display: none;
 }
 .pnr-btn svg {
 	width: var(--icon-s);
@@ -513,7 +542,7 @@
 	flex: 1 1 auto;
 	overflow-y: auto;
 	overflow-x: hidden;
-	padding: var(--size-4-1) var(--size-4-2) var(--size-4-6);
+	padding: var(--size-4-1) var(--size-4-2) calc(var(--size-4-6) + var(--pnr-bottom-inset, 0px));
 }
 .pnr-queue-empty {
 	color: var(--text-faint);
@@ -643,6 +672,129 @@
 }
 .pnr-row.age-old .pnr-row-age {
 	color: var(--color-orange);
+}
+
+/* ------------------------------------------------------------------ compact top bar and filter panel */
+
+.pnr-compact-row {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	min-width: 0;
+}
+.pnr-compact-row .pnr-controls-right {
+	flex: none;
+}
+.pnr-view button.pnr-filter-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--size-4-1);
+	white-space: nowrap;
+}
+.pnr-view button.pnr-filter-toggle.is-open {
+	box-shadow: inset 0 0 0 1.5px var(--interactive-accent);
+}
+.pnr-filter-toggle svg {
+	width: var(--icon-s);
+	height: var(--icon-s);
+}
+.pnr-filter-badge {
+	min-width: 1.4em;
+	padding: 0 5px;
+	border-radius: var(--radius-l);
+	font-size: var(--font-ui-smaller);
+	text-align: center;
+	color: var(--text-normal);
+	background: color-mix(in srgb, var(--interactive-accent) 25%, transparent);
+}
+.pnr-filter-panel {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	right: 0;
+	max-height: 75vh;
+	overflow-y: auto;
+	padding: var(--size-4-2) var(--size-4-3) var(--size-4-3);
+	background: var(--background-primary);
+	border-bottom: 1px solid var(--background-modifier-border);
+	box-shadow: var(--shadow-l);
+	border-radius: 0 0 var(--radius-l) var(--radius-l);
+}
+.pnr-filter-inner {
+	max-width: 520px;
+	margin: 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-4-2);
+}
+.pnr-filter-heading {
+	margin-top: var(--size-4-1);
+	font-size: var(--font-ui-smaller);
+	font-weight: var(--font-semibold);
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+.pnr-segmented {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--size-4-1);
+}
+.pnr-view button.pnr-seg {
+	min-height: 36px;
+	padding: 0 var(--size-4-3);
+	border-radius: var(--radius-m);
+	box-shadow: none;
+	border: 1px solid var(--background-modifier-border);
+	background-color: var(--background-secondary);
+	color: var(--text-muted);
+	white-space: nowrap;
+}
+.pnr-view button.pnr-seg.is-active {
+	background-color: color-mix(in srgb, var(--interactive-accent) 18%, var(--background-primary));
+	border-color: var(--interactive-accent);
+	color: var(--text-normal);
+}
+.pnr-segmented.is-small {
+	flex-wrap: nowrap;
+	flex: none;
+}
+.pnr-view .pnr-segmented.is-small button.pnr-seg {
+	min-height: 32px;
+	padding: 0 var(--size-4-2);
+	font-size: var(--font-ui-small);
+}
+.pnr-type-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--size-4-2);
+	min-width: 0;
+}
+.pnr-type-row-name {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.pnr-type-row .pnr-segmented.is-small button.pnr-seg.is-active {
+	border-color: var(--pnr-color);
+	background-color: color-mix(in srgb, var(--pnr-color) 18%, var(--background-primary));
+}
+.pnr-filter-sort .pnr-sort {
+	width: 100%;
+	margin-top: var(--size-4-1);
+}
+.pnr-filter-foot {
+	position: sticky;
+	bottom: calc(-1 * var(--size-4-3));
+	display: flex;
+	justify-content: flex-end;
+	gap: var(--size-4-2);
+	margin-top: var(--size-4-1);
+	padding: var(--size-4-2) 0 var(--size-4-3);
+	background-color: var(--background-primary);
 }
 
 /* ------------------------------------------------------------------ narrow panes and phones */

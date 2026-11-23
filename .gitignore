@@ -12,3 +12,6 @@ SPEC.md
 .vscode/
 .idea/
 .DS_Store
+
+# local test harness output and Obsidian app.css copy
+dev/.local/

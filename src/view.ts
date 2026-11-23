@@ -37,6 +37,7 @@ export class ReviewView extends ItemView {
 	private currentPath: string | null = null;
 	private filter: FilterId = "all";
 	private typeFilter = new Map<string, TypeFilterState>();
+	private filtersOpen = false;
 	private queueOpen = false;
 	private busy = false;
 	/** "Mark reviewed" has been pressed once and is waiting for confirmation. */
@@ -101,6 +102,14 @@ export class ReviewView extends ItemView {
 		this.updateWidthClass();
 
 		this.registerSwipe(this.mainEl);
+		this.registerDomEvent(document, "pointerdown", (evt: PointerEvent) => {
+			if (!this.filtersOpen) return;
+			const t = evt.target as HTMLElement;
+			if (t.closest(".pnr-filter-panel, .pnr-filter-toggle")) return;
+			this.filtersOpen = false;
+			this.renderTop();
+		});
+		this.registerDomEvent(window, "resize", () => this.updateBottomInset());
 		this.registerEvent(this.store.on("changed", (path: string | null) => this.onStoreChanged(path)));
 
 		if (this.store.ready) this.pickStartNote();
@@ -176,8 +185,31 @@ export class ReviewView extends ItemView {
 
 	private updateWidthClass() {
 		const narrow = this.contentEl.clientWidth > 0 && this.contentEl.clientWidth < NARROW_WIDTH;
+		const changed = narrow !== this.contentEl.hasClass("is-narrow");
 		this.contentEl.toggleClass("is-narrow", narrow);
 		if (!narrow) this.setQueueOpen(false);
+		if (changed && this.topEl) {
+			this.filtersOpen = false;
+			this.renderTop();
+		}
+		this.updateBottomInset();
+	}
+
+	/**
+	 * On phones Obsidian's navigation bar floats over the bottom of the view. Keep the
+	 * buttons (and the end of the queue) clear of it by measuring where it starts.
+	 */
+	private updateBottomInset() {
+		const nav = document.querySelector<HTMLElement>(".mobile-navbar");
+		let inset = 0;
+		if (nav && getComputedStyle(nav).display !== "none") {
+			// While Obsidian hides the bar on scroll, keep the space we measured before.
+			if (document.body.hasClass("is-hidden-nav")) return;
+			const r = nav.getBoundingClientRect();
+			const c = this.contentEl.getBoundingClientRect();
+			if (r.height > 0) inset = Math.max(0, Math.round(c.bottom - r.top));
+		}
+		this.contentEl.style.setProperty("--pnr-bottom-inset", `${inset}px`);
 	}
 
 	private setQueueOpen(open: boolean) {
@@ -240,6 +272,10 @@ export class ReviewView extends ItemView {
 	private renderTop() {
 		const el = this.topEl;
 		el.empty();
+		if (this.contentEl.hasClass("is-narrow")) {
+			this.renderCompactTop(el);
+			return;
+		}
 		const n = this.toReview().length;
 		const today = this.store.today;
 
@@ -279,6 +315,134 @@ export class ReviewView extends ItemView {
 		setIcon(qBtn.createSpan(), "list");
 		qBtn.createSpan({ text: `Queue ${this.visible().length}` });
 		qBtn.addEventListener("click", () => this.setQueueOpen(!this.queueOpen));
+	}
+
+	/** Filters that differ from the default, for the compact Filter button's badge. */
+	private activeFilterCount(): number {
+		return (this.filter === "all" ? 0 : 1) + this.typeFilter.size;
+	}
+
+	/**
+	 * Small panes and phones: one row ("N to review", Filter, Queue). Kind, item type and
+	 * sort options live in a panel that drops down under it.
+	 */
+	private renderCompactTop(el: HTMLElement) {
+		const row = el.createDiv({ cls: "pnr-compact-row" });
+		row.createSpan({ cls: "pnr-tally-count", text: `${this.toReview().length} to review` });
+
+		const right = row.createDiv({ cls: "pnr-controls-right" });
+		const fBtn = right.createEl("button", { cls: "pnr-filter-toggle", attr: { "aria-label": "Filter and sort", "aria-expanded": String(this.filtersOpen) } });
+		fBtn.toggleClass("is-open", this.filtersOpen);
+		setIcon(fBtn.createSpan(), "sliders-horizontal");
+		fBtn.createSpan({ text: "Filter" });
+		const active = this.activeFilterCount();
+		if (active > 0) fBtn.createSpan({ cls: "pnr-filter-badge", text: String(active) });
+		fBtn.addEventListener("click", () => {
+			this.filtersOpen = !this.filtersOpen;
+			this.renderTop();
+		});
+
+		const qBtn = right.createEl("button", { cls: "pnr-queue-toggle", attr: { "aria-label": "Show queue" } });
+		setIcon(qBtn.createSpan(), "list");
+		qBtn.createSpan({ text: `Queue ${this.visible().length}` });
+		qBtn.addEventListener("click", () => {
+			this.filtersOpen = false;
+			this.renderTop();
+			this.setQueueOpen(!this.queueOpen);
+		});
+
+		if (this.filtersOpen) this.renderFilterPanel(el);
+	}
+
+	private renderFilterPanel(parent: HTMLElement) {
+		let panel = parent.createDiv({ cls: "pnr-filter-panel" });
+		// Fit between the top bar and the bottom of the view (above any floating nav bar).
+		window.requestAnimationFrame(() => {
+			const inset = parseFloat(this.contentEl.style.getPropertyValue("--pnr-bottom-inset")) || 0;
+			const room = this.contentEl.getBoundingClientRect().bottom - panel.getBoundingClientRect().top - inset - 8;
+			if (room > 120) panel.style.maxHeight = `${Math.round(room)}px`;
+		});
+		panel = panel.createDiv({ cls: "pnr-filter-inner" });
+		const today = this.store.today;
+
+		// Kinds
+		panel.createDiv({ cls: "pnr-filter-heading", text: "Show" });
+		const kinds = panel.createDiv({ cls: "pnr-segmented" });
+		const listed = this.listed().filter((e) => matchesTypeFilter(e, this.typeFilter));
+		for (const f of FILTERS) {
+			if (f.id !== "all" && !this.settings.kinds[f.id as Kind]?.enabled) continue;
+			const count = listed.filter((e) => matchesFilter(e, f.id, today)).length;
+			if (count === 0 && this.filter !== f.id && f.id !== "all") continue;
+			const b = kinds.createEl("button", { cls: "pnr-seg" });
+			b.toggleClass("is-active", this.filter === f.id);
+			b.createSpan({ text: f.label });
+			b.createSpan({ cls: "pnr-chip-count", text: String(count) });
+			b.addEventListener("click", () => {
+				this.filter = f.id;
+				this.afterFilterChange();
+			});
+		}
+
+		// Item types: Any / Only / Hide
+		const pool = this.listed().filter((e) => e.needsReview && matchesFilter(e, this.filter, today));
+		const totals = openByType(pool);
+		const ids = this.typeOrder().filter((id) => !(id === OTHER_ID && this.settings.other.hidden)
+			&& ((totals[id] ?? 0) > 0 || this.typeFilter.has(id)));
+		if (ids.length > 0) {
+			panel.createDiv({ cls: "pnr-filter-heading", text: "Open items" });
+			for (const id of ids) {
+				const row = panel.createDiv({ cls: "pnr-type-row" });
+				row.style.setProperty("--pnr-color", this.colorFor(id));
+				const name = row.createDiv({ cls: "pnr-type-row-name" });
+				name.createSpan({ cls: "pnr-type-dot" });
+				name.createSpan({ text: this.labelFor(id) });
+				name.createSpan({ cls: "pnr-type-pill-count", text: String(totals[id] ?? 0) });
+				const seg = row.createDiv({ cls: "pnr-segmented is-small" });
+				const state = this.typeFilter.get(id);
+				const options: [TypeFilterState | undefined, string, string][] = [
+					[undefined, "Any", "Show notes whatever they have open"],
+					["include", "Only", `Only notes with ${this.labelFor(id)} open`],
+					["exclude", "Hide", `Hide notes with only ${this.labelFor(id)} left`],
+				];
+				for (const [value, label, tip] of options) {
+					const b = seg.createEl("button", { cls: "pnr-seg", text: label, attr: { "aria-label": tip } });
+					b.toggleClass("is-active", state === value);
+					b.addEventListener("click", () => {
+						if (value) this.typeFilter.set(id, value);
+						else this.typeFilter.delete(id);
+						this.afterFilterChange();
+					});
+				}
+			}
+		}
+
+		// Sort
+		const sortRow = panel.createDiv({ cls: "pnr-filter-sort" });
+		sortRow.createDiv({ cls: "pnr-filter-heading", text: "Sort" });
+		const sort = sortRow.createEl("select", { cls: "dropdown pnr-sort" });
+		for (const s of SORTS) {
+			const o = sort.createEl("option", { text: s.label, value: s.id });
+			if (s.id === this.settings.sort) o.selected = true;
+		}
+		sort.addEventListener("change", async () => {
+			this.settings.sort = sort.value as SortMode;
+			await this.plugin.saveSettings(false);
+		});
+
+		const foot = panel.createDiv({ cls: "pnr-filter-foot" });
+		if (this.activeFilterCount() > 0) {
+			const clear = foot.createEl("button", { cls: "pnr-filter-clear", text: "Clear filters" });
+			clear.addEventListener("click", () => {
+				this.filter = "all";
+				this.typeFilter.clear();
+				this.afterFilterChange();
+			});
+		}
+		const done = foot.createEl("button", { cls: "mod-cta pnr-filter-done", text: "Done" });
+		done.addEventListener("click", () => {
+			this.filtersOpen = false;
+			this.renderTop();
+		});
 	}
 
 	/** One pill per item type with open items: a coloured dot and the count left. */
@@ -616,7 +780,7 @@ export class ReviewView extends ItemView {
 
 		const open = bar.createEl("button", { cls: "pnr-btn pnr-open" });
 		setIcon(open.createSpan(), "file-text");
-		open.createSpan({ text: "Open note" });
+		open.createSpan({ cls: "pnr-btn-label", text: "Open note" });
 		open.setAttr("aria-label", "Open in the editor (o)");
 		open.addEventListener("click", () => this.openInEditor(true));
 
@@ -629,7 +793,8 @@ export class ReviewView extends ItemView {
 			mark.addClass("is-armed");
 			this.addTimer(mark, CONFIRM_MS, armed.until - now);
 			setIcon(mark.createSpan(), "check-check");
-			mark.createSpan({ text: e.open > 0 ? `Confirm · ${e.open} still open` : "Confirm reviewed" });
+			const narrow = this.contentEl.hasClass("is-narrow");
+			mark.createSpan({ text: e.open > 0 ? (narrow ? `Confirm (${e.open} open)` : `Confirm · ${e.open} still open`) : (narrow ? "Confirm" : "Confirm reviewed") });
 			mark.setAttr("aria-label", "Click or press Enter again to mark reviewed. Esc cancels.");
 		} else {
 			mark.addClass("mod-cta");
@@ -994,6 +1159,10 @@ export class ReviewView extends ItemView {
 		bind("Escape", () => {
 			this.disarm();
 			this.setQueueOpen(false);
+			if (this.filtersOpen) {
+				this.filtersOpen = false;
+				this.renderTop();
+			}
 		});
 		bind("u", () => void this.undoLast());
 	}

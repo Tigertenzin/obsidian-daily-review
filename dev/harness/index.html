@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Periodic Note Review: test page</title>
+<!-- Obsidian's own stylesheet, copied locally from the desktop app (not committed). -->
+<link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="styles.css">
+<style>
+	html, body { margin: 0; height: 100%; overflow: hidden; }
+	.app-container { position: fixed; inset: 0; display: flex; flex-direction: column; }
+	.workspace-leaf { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+	.workspace-leaf-content { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+	.workspace-leaf-content > .view-content { flex: 1; min-height: 0; }
+	.view-header { position: static !important; }
+	/* A stand-in for the floating mobile navbar */
+	.mobile-navbar { z-index: 50; box-shadow: var(--shadow-l); align-items: center; }
+	.mobile-navbar-actions { display: flex; gap: 8px; width: 100%; justify-content: space-around; }
+	.mobile-navbar-action { font-size: 22px; padding: 0 8px; }
+</style>
+</head>
+<body>
+<script type="module" src="harness.js"></script>
+</body>
+</html>
