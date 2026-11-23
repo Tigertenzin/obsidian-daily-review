@@ -57,7 +57,9 @@ daily(1, `## Work Log
 - [ ] Finally fix the bike's rear brake
 	- all I could do was drop it off and wait for a call
 - [ ] Re-evaluate how I take notes: make it a better place to dump thoughts to sort out later, with a much longer line so it wraps on narrow screens
+	- [x] Already sorted this part
 	- [ ] This might need some adjustments elsewhere too
+	- [ ] And a third sub-item, long enough that it wraps onto a second line on a phone screen
 - [-] Cancelled plan
 
 ## Media

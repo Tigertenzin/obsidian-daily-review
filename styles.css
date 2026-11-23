@@ -336,6 +336,13 @@
 	padding-inline-end: 4px;
 	padding-block: 1px;
 }
+/* Obsidian hangs a task's checkbox in the margin only when it's a direct child of the
+   list item; inside our wrapper it needs the same pull, or open items sit a box further
+   right than settled ones. */
+.pnr-line > .task-list-item-checkbox,
+.pnr-line > p > .task-list-item-checkbox {
+	margin-inline-start: calc(var(--checkbox-size, 15px) * -1.5);
+}
 .pnr-highlight-tint .pnr-highlight > .pnr-line {
 	background: color-mix(in srgb, var(--pnr-color) 15%, transparent);
 }
