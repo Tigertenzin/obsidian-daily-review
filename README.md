@@ -20,7 +20,8 @@ marks the note reviewed once you've dealt with them.
 - **A queue at a glance.** The notes still to review are listed beside the page, each
   showing how many open items it has left, and of which types.
 - **Mark reviewed.** Sets the note's status field in its frontmatter, changing only that
-  one line, and moves on to the next note. If items are still open, it asks first.
+  one line, and moves on to the next note. It always asks first, and says how many items
+  are still open.
 - **Check items off in place.** Click a checkbox on the page to check or uncheck it in
   the note.
 - **Keyboard and touch.** `←`/`→` move through the queue on desktop; swipe left and right

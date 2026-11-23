@@ -814,15 +814,16 @@ export class ReviewView extends ItemView {
 			new Notice(`${e.kind[0].toUpperCase()}${e.kind.slice(1)} notes can't be marked reviewed from here (see settings).`);
 			return;
 		}
-		if (e.open > 0) {
-			const ok = await confirm(
-				this.app,
-				"Mark reviewed?",
-				`${e.open} ${e.open === 1 ? "item is" : "items are"} still open on this note. Mark it reviewed anyway?`,
-				"Mark reviewed",
-			);
-			if (!ok || this.currentPath !== e.path) return;
-		}
+		// Always confirmed, whether from the button or Enter (Enter again confirms).
+		const ok = await confirm(
+			this.app,
+			"Mark reviewed?",
+			e.open > 0
+				? `${e.open} ${e.open === 1 ? "item is" : "items are"} still open on this note. Mark it reviewed anyway?`
+				: "Nothing is left open on this note.",
+			"Mark reviewed",
+		);
+		if (!ok || this.currentPath !== e.path) return;
 		this.busy = true;
 		try {
 			const vis = this.visible();
@@ -830,7 +831,6 @@ export class ReviewView extends ItemView {
 			const field = statusFieldFor(e.kind, this.settings);
 			const value = reviewedValueFor(e.kind, this.settings);
 			await this.app.vault.process(file, (raw) => withFrontmatterValue(raw, field, value));
-			await this.stamp();
 			this.store.setNeedsReview(e.path, false);
 			if (this.settings.showReviewed) this.goToNextAfter(e, index + 1);
 			else this.goToNextAfter(e, Math.max(0, index));
@@ -849,16 +849,6 @@ export class ReviewView extends ItemView {
 		const field = statusFieldFor(e.kind, this.settings);
 		await this.app.vault.process(file, (raw) => withFrontmatterValue(raw, field, unreviewedValueFor(e.kind, this.settings)));
 		this.store.setNeedsReview(e.path, true);
-	}
-
-	private stamp(): Promise<void> {
-		const sheet = this.sheetEl.querySelector<HTMLElement>(".pnr-sheet");
-		if (!sheet) return Promise.resolve();
-		const s = sheet.createDiv({ cls: "pnr-stamp" });
-		setIcon(s.createSpan(), "check");
-		s.createSpan({ text: "Reviewed" });
-		sheet.addClass("is-stamped");
-		return new Promise((r) => window.setTimeout(r, this.reducedMotion() ? 100 : 500));
 	}
 
 	// ---------------------------------------------------------------- input

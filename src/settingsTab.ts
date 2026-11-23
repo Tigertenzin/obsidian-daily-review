@@ -101,10 +101,10 @@ export class ReviewSettingTab extends PluginSettingTab {
 				this.s.unreviewedValue = v.trim();
 				this.save();
 			}));
-		el.createEl("p", {
-			cls: "setting-item-description pnr-kinds-intro",
-			text: "A note's kind comes from its tag (checked yearly, quarterly, monthly, then weekly). A note with none of these tags gets the first kind whose title format fits, from daily to yearly. Title formats use moment.js syntax.",
-		});
+		const intro = el.createEl("p", { cls: "setting-item-description pnr-kinds-intro" });
+		intro.appendText("A note's kind comes from its tag (checked yearly, quarterly, monthly, then weekly). A note with none of these tags gets the first kind whose title format fits, from daily to yearly. Title formats use moment.js tokens, such as YYYY (2026), MM (11), MMM (Nov), DD (22), ddd (Sun) and GGGG-[W]WW (2026-W47); text in [brackets] is kept as written. ");
+		intro.createEl("a", { text: "All format tokens", href: "https://momentjs.com/docs/#/displaying/format/" });
+		intro.appendText(".");
 
 		// ------------------------------------------------------------ one section per kind
 		for (const k of KINDS) this.renderKind(el, k);

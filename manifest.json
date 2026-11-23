@@ -1,7 +1,7 @@
 {
 	"id": "periodic-note-review",
 	"name": "Periodic Note Review",
-	"version": "0.1.4",
+	"version": "0.1.5",
 	"minAppVersion": "1.4.0",
 	"description": "Work through a backlog of daily, weekly and monthly notes one page at a time, with open items highlighted by type.",
 	"author": "Tigertenzin",

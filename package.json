@@ -1,6 +1,6 @@
 {
   "name": "periodic-note-review",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Review a backlog of periodic notes one page at a time, with their open items highlighted.",
   "main": "main.js",
   "private": true,

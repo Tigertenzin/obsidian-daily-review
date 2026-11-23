@@ -413,42 +413,6 @@
 	height: var(--icon-s);
 }
 
-/* "Reviewed" stamp */
-.pnr-stamp {
-	position: absolute;
-	top: var(--size-4-6);
-	right: var(--size-4-6);
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	padding: 4px 14px;
-	border: 3px solid var(--color-green);
-	border-radius: var(--radius-m);
-	color: var(--color-green);
-	font-family: var(--font-interface);
-	font-weight: var(--font-bold);
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
-	pointer-events: none;
-	opacity: 0;
-	transform: rotate(-8deg) scale(1.8);
-	animation: pnr-stamp 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2) forwards;
-}
-.pnr-sheet.is-stamped {
-	animation: pnr-thud 0.3s ease-out 0.2s;
-}
-@keyframes pnr-stamp {
-	to {
-		opacity: 1;
-		transform: rotate(-8deg) scale(1);
-	}
-}
-@keyframes pnr-thud {
-	50% {
-		transform: scale(0.992);
-	}
-}
-
 /* ------------------------------------------------------------------ empty state */
 
 .pnr-empty {
@@ -672,10 +636,6 @@
 .pnr-view.is-narrow .pnr-queue-close {
 	display: inline-flex;
 }
-.pnr-view.is-narrow .pnr-stamp {
-	top: var(--size-4-3);
-	right: var(--size-4-3);
-}
 
 /* ------------------------------------------------------------------ reduced motion */
 
@@ -685,11 +645,6 @@
 	.pnr-view *::after {
 		transition-duration: 0s !important;
 	}
-	.pnr-stamp {
-		animation-duration: 0.1s;
-		transform: rotate(-8deg);
-	}
-	.pnr-sheet.is-stamped,
 	.pnr-flash > .pnr-line,
 	.pnr-view.is-narrow.is-queue-open .pnr-queue {
 		animation: none;
