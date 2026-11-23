@@ -60,6 +60,11 @@ export class ReviewSettingTab extends PluginSettingTab {
 		this.sharedFieldHints = [];
 		this.formatPreviews = [];
 
+		el.createDiv({
+			cls: "setting-item-description pnr-version",
+			text: `Periodic Note Review ${this.plugin.manifest.version} is running. After an update, restart Obsidian (or turn the plugin off and on) if this doesn't show the new version.`,
+		});
+
 		// ------------------------------------------------------------ general
 		new Setting(el).setName("General").setHeading();
 		new Setting(el)
