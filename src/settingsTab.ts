@@ -1,4 +1,5 @@
 import { App, PluginSettingTab, setIcon, Setting } from "obsidian";
+import { describeFormat } from "./core/queue";
 import { typeForHeading } from "./core/parse";
 import {
 	HighlightStyle, ItemType, Kind, KINDS, MatchMode, MissingStatus, OTHER_ID, UnknownMarks,
@@ -22,7 +23,22 @@ function slug(label: string, taken: Set<string>): string {
 	return id;
 }
 
+const CURRENT_LABEL: Record<Kind, string> = {
+	daily: "Today's note", weekly: "This week's note", monthly: "This month's note",
+	quarterly: "This quarter's note", yearly: "This year's note",
+};
+
+function countText(n: number): string {
+	if (n === 0) return "No notes in your folder match yet.";
+	return `Matches ${n} ${n === 1 ? "note" : "notes"} in your folder.`;
+}
+
 export class ReviewSettingTab extends PluginSettingTab {
+	private sharedFieldHints: { kind: Kind; el: HTMLElement; input?: HTMLInputElement }[] = [];
+	private formatPreviews: { kind: Kind; el: HTMLElement }[] = [];
+	private lastCounts: Record<Kind, number> | null = null;
+	private countTimer = 0;
+
 	constructor(app: App, private plugin: PeriodicNoteReviewPlugin) {
 		super(app, plugin);
 	}
@@ -40,14 +56,18 @@ export class ReviewSettingTab extends PluginSettingTab {
 		el.empty();
 		el.addClass("pnr-settings");
 
-		// ------------------------------------------------------------ notes
-		new Setting(el).setName("Notes").setHeading();
+		this.sharedFieldHints = [];
+		this.formatPreviews = [];
+
+		// ------------------------------------------------------------ general
+		new Setting(el).setName("General").setHeading();
 		new Setting(el)
 			.setName("Notes folder")
 			.setDesc("Periodic notes are found in this folder and its subfolders. Leave empty for the whole vault.")
 			.addText((t) => t.setValue(this.s.folder).onChange((v) => {
 				this.s.folder = v.trim();
 				this.save();
+				this.refreshPreviews();
 			}));
 		new Setting(el)
 			.setName("Membership tag")
@@ -55,31 +75,23 @@ export class ReviewSettingTab extends PluginSettingTab {
 			.addText((t) => t.setValue(this.s.membershipTag).onChange((v) => {
 				this.s.membershipTag = v.trim();
 				this.save();
+				this.refreshPreviews();
 			}));
 		new Setting(el)
 			.setName("Title only needs to start with the format")
-			.setDesc("For example, a daily note titled \"2026-11-22 Sun - trip\" still counts.")
+			.setDesc("For example, a daily note titled \"2026-11-22 trip\" still counts.")
 			.addToggle((t) => t.setValue(this.s.titlePrefixMatch).onChange((v) => {
 				this.s.titlePrefixMatch = v;
 				this.save();
+				this.refreshPreviews();
 			}));
-
-		// ------------------------------------------------------------ kinds
-		new Setting(el).setName("Note kinds").setHeading();
-		el.createEl("p", {
-			cls: "setting-item-description",
-			text: "A note's kind comes from its tag (checked yearly, quarterly, monthly, weekly); a note with none of these tags is daily. Title formats use moment.js syntax.",
-		});
-		for (const k of KINDS) this.renderKind(el, k);
-
-		// ------------------------------------------------------------ review state
-		new Setting(el).setName("Review state").setHeading();
 		new Setting(el)
 			.setName("Status field")
-			.setDesc("Frontmatter field that says whether a note has been reviewed.")
+			.setDesc("Frontmatter field that says whether a note has been reviewed. Every kind of note uses it, unless that kind sets its own below.")
 			.addText((t) => t.setValue(this.s.statusField).onChange((v) => {
 				this.s.statusField = v.trim();
 				this.save();
+				this.refreshSharedFieldHints();
 			}));
 		new Setting(el)
 			.setName("Unreviewed value")
@@ -88,6 +100,14 @@ export class ReviewSettingTab extends PluginSettingTab {
 				this.s.unreviewedValue = v.trim();
 				this.save();
 			}));
+		el.createEl("p", {
+			cls: "setting-item-description pnr-kinds-intro",
+			text: "A note's kind comes from its tag (checked yearly, quarterly, monthly, then weekly). A note with none of these tags gets the first kind whose title format fits, from daily to yearly. Title formats use moment.js syntax.",
+		});
+
+		// ------------------------------------------------------------ one section per kind
+		for (const k of KINDS) this.renderKind(el, k);
+		this.refreshPreviews();
 
 		// ------------------------------------------------------------ item types
 		new Setting(el).setName("Item types").setHeading();
@@ -210,10 +230,10 @@ export class ReviewSettingTab extends PluginSettingTab {
 
 	private renderKind(el: HTMLElement, k: Kind) {
 		const ks = this.s.kinds[k];
-		const box = el.createDiv({ cls: "pnr-kind" });
-		new Setting(box)
-			.setName(`${KIND_LABEL[k]} notes`)
-			.setDesc(ks.enabled ? "Included in the review." : "Left out of the review.")
+		new Setting(el).setName(`${KIND_LABEL[k]} notes`).setHeading();
+		new Setting(el)
+			.setName("Include in the review")
+			.setDesc(ks.enabled ? "" : `${KIND_LABEL[k]} notes are left out of the queue and the counts.`)
 			.addToggle((t) => t.setValue(ks.enabled).onChange((v) => {
 				ks.enabled = v;
 				this.save();
@@ -221,34 +241,44 @@ export class ReviewSettingTab extends PluginSettingTab {
 			}));
 		if (!ks.enabled) return;
 		if (k !== "daily") {
-			new Setting(box).setName("Tag").setClass("pnr-sub").addText((t) => t.setValue(ks.tag).onChange((v) => {
-				ks.tag = v.trim();
-				this.save();
-			}));
+			new Setting(el)
+				.setName("Tag")
+				.setDesc(`Notes with this tag are ${k} notes.`)
+				.addText((t) => t.setValue(ks.tag).onChange((v) => {
+					ks.tag = v.trim();
+					this.save();
+					this.refreshPreviews();
+				}));
 		}
-		new Setting(box).setName("Title format").setClass("pnr-sub").addText((t) => t.setValue(ks.titleFormat).onChange((v) => {
+		const format = new Setting(el).setName("Title format");
+		const preview = format.descEl.createDiv({ cls: "pnr-format-preview" });
+		this.formatPreviews.push({ kind: k, el: preview });
+		format.addText((t) => t.setValue(ks.titleFormat).onChange((v) => {
 			ks.titleFormat = v;
 			this.save();
+			this.refreshPreviews();
 		}));
-		new Setting(box)
-			.setName("Status field")
-			.setDesc(ks.statusField ? "" : `Uses the shared field ("${this.s.statusField}").`)
-			.setClass("pnr-sub")
-			.addText((t) => t.setPlaceholder(this.s.statusField).setValue(ks.statusField).onChange((v) => {
+
+		const field = new Setting(el).setName("Status field (optional)");
+		const hint = field.descEl.createSpan();
+		this.sharedFieldHints.push({ kind: k, el: hint });
+		field.addText((t) => {
+			t.setPlaceholder(this.s.statusField).setValue(ks.statusField).onChange((v) => {
 				ks.statusField = v.trim();
 				this.save();
-			}));
-		new Setting(box)
-			.setName("Reviewed value")
-			.setDesc("Leave empty to use the shared rule (anything but the unreviewed value counts as reviewed).")
-			.setClass("pnr-sub")
+				this.refreshSharedFieldHints();
+			});
+			this.sharedFieldHints[this.sharedFieldHints.length - 1].input = t.inputEl;
+		});
+		new Setting(el)
+			.setName("Reviewed value (optional)")
+			.setDesc("Leave empty to use the shared rule: any value other than the unreviewed value counts as reviewed. If set, only this value does (for example \"completed\").")
 			.addText((t) => t.setValue(ks.reviewedValue).onChange((v) => {
 				ks.reviewedValue = v.trim();
 				this.save();
 			}));
-		new Setting(box)
+		new Setting(el)
 			.setName("When the status field is missing")
-			.setClass("pnr-sub")
 			.addDropdown((d) => d
 				.addOptions({ reviewed: "Counts as reviewed", unreviewed: "Counts as not reviewed" })
 				.setValue(ks.missingStatus)
@@ -256,13 +286,46 @@ export class ReviewSettingTab extends PluginSettingTab {
 					ks.missingStatus = v as MissingStatus;
 					this.save();
 				}));
-		new Setting(box)
+		new Setting(el)
 			.setName("Can be marked reviewed from the review page")
-			.setClass("pnr-sub")
 			.addToggle((t) => t.setValue(ks.canMarkReviewed).onChange((v) => {
 				ks.canMarkReviewed = v;
 				this.save(false);
 			}));
+		this.refreshSharedFieldHints();
+	}
+
+	/** Keep each kind's "uses the shared field" hint and placeholder in step. */
+	private refreshSharedFieldHints() {
+		for (const h of this.sharedFieldHints) {
+			const own = this.s.kinds[h.kind].statusField.trim();
+			h.el.setText(own
+				? `This kind reads and writes "${own}" instead of the shared field.`
+				: `Empty: uses the shared status field, "${this.s.statusField}".`);
+			h.input?.setAttr("placeholder", this.s.statusField);
+		}
+	}
+
+	/** Title format previews: today's title, how it's read, and how many notes match. */
+	private refreshPreviews() {
+		for (const p of this.formatPreviews) {
+			const ks = this.s.kinds[p.kind];
+			p.el.empty();
+			const ex = describeFormat(p.kind, ks.titleFormat);
+			const line = p.el.createDiv();
+			line.appendText(`${CURRENT_LABEL[p.kind]}: `);
+			line.createEl("code", { text: ex.title || "(empty)" });
+			if (ex.ok) p.el.createDiv({ text: `Read as ${ex.readAs}` });
+			else p.el.createDiv({ cls: "pnr-format-warn", text: "This title can't be read back as this period. Check the format." });
+			p.el.createDiv({ cls: "pnr-format-count", text: this.lastCounts ? countText(this.lastCounts[p.kind]) : "Counting notes…" });
+		}
+		window.clearTimeout(this.countTimer);
+		this.countTimer = window.setTimeout(() => {
+			this.lastCounts = this.plugin.store.countByKind(this.s);
+			for (const p of this.formatPreviews) {
+				p.el.querySelector(".pnr-format-count")?.setText(countText(this.lastCounts[p.kind]));
+			}
+		}, 350);
 	}
 
 	private renderType(parent: HTMLElement, t: ItemType, i: number) {

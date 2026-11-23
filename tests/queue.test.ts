@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { longAge, NoteEntry, rangeLabel, shortAge, sortEntries, ticksFor } from "../src/core/queue";
+import { moment } from "obsidian";
+import { describeFormat, longAge, NoteEntry, rangeLabel, shortAge, sortEntries, ticksFor } from "../src/core/queue";
 import { example } from "./fixtures";
 
 const S = example();
@@ -27,5 +28,19 @@ describe("queue", () => {
 		const wk = entry({ kind: "weekly", start: "2026-11-16", end: "2026-11-22", anchor: "2026-11-22" });
 		expect(longAge(wk, "2026-11-19")).toBe("Ends in 3 days");
 		expect(rangeLabel("2026-11-30", "2026-12-06")).toBe("Nov 30–Dec 6");
+	});
+});
+
+describe("describeFormat", () => {
+	const now = moment("2026-11-22", "YYYY-MM-DD");
+	it("shows today's title and how it's read", () => {
+		expect(describeFormat("weekly", "GGGG-[W]WW", now)).toEqual({ title: "2026-W47", ok: true, readAs: "the week of Nov 16–22, 2026" });
+		expect(describeFormat("daily", "YYYY-MM-DD ddd", now)).toMatchObject({ title: "2026-11-22 Sun", ok: true });
+		expect(describeFormat("yearly", "[✱ ]YYYY", now)).toMatchObject({ title: "✱ 2026", ok: true });
+	});
+	it("flags formats that can't be read back as the period", () => {
+		expect(describeFormat("weekly", "YYYY", now).ok).toBe(false);
+		expect(describeFormat("daily", "YYYY-MM", now).ok).toBe(false);
+		expect(describeFormat("daily", "", now).ok).toBe(false);
 	});
 });

@@ -1,5 +1,5 @@
 import { moment } from "obsidian";
-import { daysAgo, kindWeight, Period } from "./periods";
+import { daysAgo, kindWeight, parseTitle, Period, periodFor } from "./periods";
 import { Kind, OTHER_ID, Settings, SortMode } from "./settings";
 import { TypeCount } from "./parse";
 
@@ -154,3 +154,23 @@ export function groupLabel(e: NoteEntry): string {
 	if (e.kind === "yearly") return a.format("YYYY");
 	return a.format("MMMM YYYY");
 }
+
+/** Today's title in a kind's format, and whether it reads back as the current period. */
+export function describeFormat(kind: Kind, format: string, now = moment()): { title: string; ok: boolean; readAs: string } {
+	const title = format.trim() ? now.format(format) : "";
+	const parsed = title ? parseTitle(title, format, false) : null;
+	if (!parsed) return { title, ok: false, readAs: "" };
+	const p = periodFor(kind, parsed, format);
+	const today = now.format("YYYY-MM-DD");
+	if (!(p.start <= today && today <= p.end)) return { title, ok: false, readAs: "" };
+	const s = moment(p.start, "YYYY-MM-DD");
+	const readAs: Record<Kind, string> = {
+		daily: s.format("dddd, D MMMM YYYY"),
+		weekly: `the week of ${rangeLabel(p.start, p.end, true)}`,
+		monthly: s.format("MMMM YYYY"),
+		quarterly: `Q${s.quarter()} ${s.format("YYYY")} (${rangeLabel(p.start, p.end)})`,
+		yearly: s.format("YYYY"),
+	};
+	return { title, ok: true, readAs: readAs[kind] };
+}
+

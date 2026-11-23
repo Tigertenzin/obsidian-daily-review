@@ -3,7 +3,7 @@ import { analyzeNote } from "./core/parse";
 import { classifyNote, hasTag, todayString } from "./core/periods";
 import { NoteEntry } from "./core/queue";
 import { needsReview } from "./core/review";
-import { Settings } from "./core/settings";
+import { Kind, Settings } from "./core/settings";
 
 /**
  * Keeps one NoteEntry per periodic note in the notes folder, updated from vault and
@@ -109,6 +109,22 @@ export class NoteStore extends Events {
 			file.path,
 			a.headings.filter((h) => h.level === settings.sectionLevel).map((h) => h.text.trim()),
 		);
+	}
+
+	/** How many notes in the folder each kind would pick up with `settings`. */
+	countByKind(settings: Settings): Record<Kind, number> {
+		const counts = { daily: 0, weekly: 0, monthly: 0, quarterly: 0, yearly: 0 };
+		const folder = settings.folder.trim().replace(/^\/+|\/+$/g, "");
+		for (const file of this.app.vault.getMarkdownFiles()) {
+			if (folder && !file.path.startsWith(folder + "/")) continue;
+			const cache = this.app.metadataCache.getFileCache(file);
+			if (!cache) continue;
+			const tags = getAllTags(cache) ?? [];
+			if (settings.membershipTag.trim() && !hasTag(tags, settings.membershipTag)) continue;
+			const p = classifyNote(file.basename, tags, settings);
+			if (p) counts[p.kind]++;
+		}
+		return counts;
 	}
 
 	/** Every section heading in the notes, with how many notes use it, most used first. */
