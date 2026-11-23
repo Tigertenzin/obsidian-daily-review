@@ -1,7 +1,6 @@
 import {
 	Component, ItemView, Keymap, MarkdownRenderer, moment, Notice, Scope, setIcon, TFile, WorkspaceLeaf,
 } from "obsidian";
-import { confirm } from "./confirm";
 import {
 	analyzeNote, domainLabel, firstLinkDomain, Item, NoteAnalysis, typeForHeading, withMark,
 } from "./core/parse";
@@ -18,6 +17,10 @@ import type PeriodicNoteReviewPlugin from "./main";
 export const VIEW_TYPE = "periodic-note-review";
 
 const NARROW_WIDTH = 900;
+/** How long "Mark reviewed" waits for the second click or Enter. */
+const CONFIRM_MS = 4000;
+/** How long the Undo bar stays after marking a note reviewed. */
+const UNDO_MS = 6000;
 const MAX_TICKS = 9;
 const SORTS: { id: SortMode; label: string }[] = [
 	{ id: "oldest", label: "Oldest first" },
@@ -36,6 +39,14 @@ export class ReviewView extends ItemView {
 	private typeFilter = new Map<string, TypeFilterState>();
 	private queueOpen = false;
 	private busy = false;
+	/** "Mark reviewed" has been pressed once and is waiting for confirmation. */
+	private armed: { path: string; until: number; timer: number } | null = null;
+	/** The last "Mark reviewed", while it can still be undone. */
+	private undo: {
+		path: string; label: string; kind: Kind; field: string; before: string; after: string;
+		until: number; timer: number;
+	} | null = null;
+	private actionsEl!: HTMLElement;
 
 	private topEl!: HTMLElement;
 	private mainEl!: HTMLElement;
@@ -81,6 +92,7 @@ export class ReviewView extends ItemView {
 		const body = root.createDiv({ cls: "pnr-body" });
 		this.mainEl = body.createDiv({ cls: "pnr-main" });
 		this.sheetEl = this.mainEl.createDiv({ cls: "pnr-sheet-wrap" });
+		this.actionsEl = this.mainEl.createDiv({ cls: "pnr-actions-host", attr: { "aria-live": "polite" } });
 		this.queueEl = body.createDiv({ cls: "pnr-queue" });
 
 		const ro = new ResizeObserver(() => this.updateWidthClass());
@@ -96,6 +108,8 @@ export class ReviewView extends ItemView {
 	}
 
 	async onClose() {
+		if (this.armed) window.clearTimeout(this.armed.timer);
+		if (this.undo) window.clearTimeout(this.undo.timer);
 		this.noteComponent = null;
 	}
 
@@ -432,6 +446,7 @@ export class ReviewView extends ItemView {
 	// ---------------------------------------------------------------- navigation
 
 	goTo(path: string | null) {
+		if (this.armed && this.armed.path !== path) this.disarm(false);
 		this.currentPath = path;
 		this.mainEl.scrollTop = 0;
 		this.resetSideways();
@@ -523,7 +538,7 @@ export class ReviewView extends ItemView {
 		this.analysis = a;
 		this.sheetEl.empty();
 		this.sheetEl.appendChild(sheet);
-		this.renderActions(this.sheetEl, e);
+		this.renderActions();
 		this.decorate(noteEl, a, file);
 		if (keepScroll) this.mainEl.scrollTop = scroll;
 		for (const s of ["tint", "bar", "checkbox", "none"]) {
@@ -568,8 +583,38 @@ export class ReviewView extends ItemView {
 		sum.createSpan({ cls: "pnr-summary-meta", text: parts.join(" · ") });
 	}
 
-	private renderActions(parent: HTMLElement, e: NoteEntry) {
-		const bar = parent.createDiv({ cls: "pnr-actions" });
+	/**
+	 * The bar under the note: the Undo strip (while the last "Mark reviewed" can be undone),
+	 * then the buttons. While "Mark reviewed" waits for confirmation, a tint across the
+	 * button bar drains right to left; it's cancelled when the tint runs out.
+	 */
+	private renderActions() {
+		const host = this.actionsEl;
+		host.empty();
+		const e = this.current();
+		const now = Date.now();
+
+		if (this.undo) {
+			const u = this.undo;
+			const strip = host.createDiv({ cls: "pnr-undo" });
+			this.addTimer(strip, UNDO_MS, u.until - now);
+			const text = strip.createDiv({ cls: "pnr-undo-text" });
+			setIcon(text.createSpan(), "check");
+			text.createSpan({ text: `Marked ${u.label} reviewed` });
+			const btn = strip.createEl("button", { cls: "pnr-btn pnr-undo-btn", attr: { "aria-label": "Undo (u)" } });
+			setIcon(btn.createSpan(), "undo-2");
+			btn.createSpan({ text: "Undo" });
+			btn.addEventListener("click", () => void this.undoLast());
+		}
+		if (!e) return;
+
+		const bar = host.createDiv({ cls: "pnr-actions" });
+		const armed = this.armed?.path === e.path ? this.armed : null;
+		if (armed) {
+			bar.addClass("is-armed");
+			this.addTimer(bar, CONFIRM_MS, armed.until - now);
+		}
+
 		const prev = bar.createEl("button", { cls: "pnr-btn pnr-prev", attr: { "aria-label": "Previous note (←)" } });
 		setIcon(prev, "chevron-left");
 		prev.addEventListener("click", () => this.step(-1));
@@ -582,14 +627,19 @@ export class ReviewView extends ItemView {
 
 		const ks = this.settings.kinds[e.kind];
 		const mark = bar.createEl("button", { cls: "pnr-btn pnr-mark" });
-		if (e.needsReview) {
+		if (!e.needsReview) {
+			setIcon(mark.createSpan(), "rotate-ccw");
+			mark.createSpan({ text: "Mark unreviewed" });
+		} else if (armed) {
+			mark.addClass("mod-cta", "is-armed");
+			setIcon(mark.createSpan(), "check-check");
+			mark.createSpan({ text: e.open > 0 ? `Confirm · ${e.open} still open` : "Confirm reviewed" });
+			mark.setAttr("aria-label", "Click or press Enter again to mark reviewed. Esc cancels.");
+		} else {
 			mark.addClass("mod-cta");
 			setIcon(mark.createSpan(), "check");
 			mark.createSpan({ text: "Mark reviewed" });
 			mark.setAttr("aria-label", "Mark reviewed (Enter)");
-		} else {
-			setIcon(mark.createSpan(), "rotate-ccw");
-			mark.createSpan({ text: "Mark unreviewed" });
 		}
 		if (!ks.canMarkReviewed) {
 			mark.disabled = true;
@@ -602,6 +652,57 @@ export class ReviewView extends ItemView {
 		next.addEventListener("click", () => this.step(1));
 	}
 
+	/** A tint across `el` that drains right to left over `total` ms, `left` ms of it remaining. */
+	private addTimer(el: HTMLElement, total: number, left: number) {
+		const t = el.createDiv({ cls: "pnr-timer" });
+		t.style.animationDuration = `${total}ms`;
+		t.style.animationDelay = `-${Math.max(0, total - left)}ms`;
+	}
+
+	private arm(path: string) {
+		this.disarm(false);
+		const timer = window.setTimeout(() => this.disarm(), CONFIRM_MS);
+		this.armed = { path, until: Date.now() + CONFIRM_MS, timer };
+		this.renderActions();
+	}
+
+	private disarm(render = true) {
+		if (!this.armed) return;
+		window.clearTimeout(this.armed.timer);
+		this.armed = null;
+		if (render) this.renderActions();
+	}
+
+	private clearUndo(render = true) {
+		if (!this.undo) return;
+		window.clearTimeout(this.undo.timer);
+		this.undo = null;
+		if (render) this.renderActions();
+	}
+
+	/** Put the note back the way it was before the last "Mark reviewed", and go back to it. */
+	async undoLast() {
+		const u = this.undo;
+		if (!u) return;
+		this.clearUndo(false);
+		const f = this.app.vault.getAbstractFileByPath(u.path);
+		if (!(f instanceof TFile)) {
+			this.renderActions();
+			return;
+		}
+		try {
+			await this.app.vault.process(f, (data) =>
+				// Unchanged since: restore it exactly. Edited since: just set the field back.
+				data === u.after ? u.before : withFrontmatterValue(data, u.field, unreviewedValueFor(u.kind, this.settings)));
+		} catch (err) {
+			console.error("Periodic Note Review: couldn't undo", err);
+			new Notice("Couldn't undo. See the console for details.");
+			return;
+		}
+		this.store.setNeedsReview(u.path, true);
+		this.goTo(u.path);
+	}
+
 	private renderEmpty() {
 		this.analysis = null;
 		this.itemEls = [];
@@ -609,6 +710,7 @@ export class ReviewView extends ItemView {
 		this.noteComponent = null;
 		const el = this.sheetEl;
 		el.empty();
+		this.renderActions();
 		const box = el.createDiv({ cls: "pnr-sheet pnr-empty" });
 		if (!this.store.ready) {
 			box.createDiv({ cls: "pnr-empty-title", text: "Reading your notes…" });
@@ -805,6 +907,7 @@ export class ReviewView extends ItemView {
 
 	// ---------------------------------------------------------------- review actions
 
+	/** First call arms the button; a second call within CONFIRM_MS marks the note reviewed. */
 	async markReviewed() {
 		const e = this.current();
 		const file = this.currentFile();
@@ -814,23 +917,30 @@ export class ReviewView extends ItemView {
 			new Notice(`${e.kind[0].toUpperCase()}${e.kind.slice(1)} notes can't be marked reviewed from here (see settings).`);
 			return;
 		}
-		// Always confirmed, whether from the button or Enter (Enter again confirms).
-		const ok = await confirm(
-			this.app,
-			"Mark reviewed?",
-			e.open > 0
-				? `${e.open} ${e.open === 1 ? "item is" : "items are"} still open on this note. Mark it reviewed anyway?`
-				: "Nothing is left open on this note.",
-			"Mark reviewed",
-		);
-		if (!ok || this.currentPath !== e.path) return;
+		if (this.armed?.path !== e.path) {
+			this.arm(e.path);
+			return;
+		}
+		this.disarm(false);
 		this.busy = true;
 		try {
 			const vis = this.visible();
 			const index = vis.findIndex((x) => x.path === e.path);
 			const field = statusFieldFor(e.kind, this.settings);
 			const value = reviewedValueFor(e.kind, this.settings);
-			await this.app.vault.process(file, (raw) => withFrontmatterValue(raw, field, value));
+			let before = "";
+			let after = "";
+			await this.app.vault.process(file, (raw) => {
+				before = raw;
+				after = withFrontmatterValue(raw, field, value);
+				return after;
+			});
+			this.clearUndo(false);
+			const timer = window.setTimeout(() => this.clearUndo(), UNDO_MS);
+			this.undo = {
+				path: e.path, label: mastheadFor(e, this.settings).headline, kind: e.kind, field, before, after,
+				until: Date.now() + UNDO_MS, timer,
+			};
 			this.store.setNeedsReview(e.path, false);
 			if (this.settings.showReviewed) this.goToNextAfter(e, index + 1);
 			else this.goToNextAfter(e, Math.max(0, index));
@@ -839,6 +949,7 @@ export class ReviewView extends ItemView {
 			new Notice("Couldn't mark the note reviewed. See the console for details.");
 		} finally {
 			this.busy = false;
+			this.renderActions();
 		}
 	}
 
@@ -882,7 +993,11 @@ export class ReviewView extends ItemView {
 			if (!evt.repeat) void this.markReviewed();
 		});
 		bind("o", () => this.openInEditor(true));
-		bind("Escape", () => this.setQueueOpen(false));
+		bind("Escape", () => {
+			this.disarm();
+			this.setQueueOpen(false);
+		});
+		bind("u", () => void this.undoLast());
 	}
 
 	/** Mostly-horizontal swipes on the page go to the previous / next note. */

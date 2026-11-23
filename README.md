@@ -20,11 +20,12 @@ marks the note reviewed once you've dealt with them.
 - **A queue at a glance.** The notes still to review are listed beside the page, each
   showing how many open items it has left, and of which types.
 - **Mark reviewed.** Sets the note's status field in its frontmatter, changing only that
-  one line, and moves on to the next note. It always asks first, and says how many items
-  are still open.
+  one line, and moves on to the next note. Press it twice (or Enter twice) to confirm:
+  the first press starts a short countdown on the button bar. An Undo bar appears for a
+  few seconds afterwards.
 - **Check items off in place.** Click a checkbox on the page to check or uncheck it in
   the note.
-- **Keyboard and touch.** `←`/`→` move through the queue on desktop; swipe left and right
+- **Keyboard and touch.** `←`/`→` move through the queue on desktop, `u` undoes the last Mark reviewed; swipe left and right
   on mobile. An "Open note" button opens the note in the normal editor. Every action is
   also a command, so it can be given a hotkey.
 

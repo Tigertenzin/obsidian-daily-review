@@ -386,17 +386,90 @@
 
 /* ------------------------------------------------------------------ actions */
 
-.pnr-actions {
+.pnr-actions-host {
 	position: sticky;
 	bottom: 0;
 	z-index: 2;
+	max-width: calc(var(--file-line-width, 700px) + 2 * var(--size-4-12));
+	margin: 0 auto;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--size-4-2);
+	padding: var(--size-4-4) 0 calc(var(--size-4-4) + env(safe-area-inset-bottom, 0px));
+	background: linear-gradient(to bottom, transparent, var(--background-secondary) 35%);
+}
+.pnr-actions-host:empty {
+	display: none;
+}
+.pnr-actions,
+.pnr-undo {
+	position: relative;
+	isolation: isolate;
+	overflow: hidden;
+	border-radius: var(--radius-l);
+	max-width: 100%;
+}
+.pnr-actions {
 	display: flex;
 	flex-wrap: wrap;
 	justify-content: center;
 	align-items: center;
 	gap: var(--size-4-2);
-	padding: var(--size-4-4) 0 calc(var(--size-4-4) + env(safe-area-inset-bottom, 0px));
-	background: linear-gradient(to bottom, transparent, var(--background-secondary) 35%);
+	padding: var(--size-4-1);
+	border: 1px solid transparent;
+}
+.pnr-actions.is-armed {
+	background: var(--background-primary);
+	border-color: var(--interactive-accent);
+}
+.pnr-undo {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	gap: var(--size-4-2) var(--size-4-3);
+	padding: var(--size-4-1) var(--size-4-1) var(--size-4-1) var(--size-4-3);
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: var(--shadow-s);
+	font-size: var(--font-ui-small);
+}
+.pnr-undo-text {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--text-muted);
+}
+.pnr-undo-text svg {
+	width: var(--icon-s);
+	height: var(--icon-s);
+	color: var(--color-green);
+}
+/* Countdown: a tint behind the bar that drains from right to left */
+.pnr-timer {
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	transform-origin: left center;
+	animation-name: pnr-drain;
+	animation-timing-function: linear;
+	animation-fill-mode: forwards;
+	pointer-events: none;
+}
+.pnr-actions .pnr-timer {
+	background: color-mix(in srgb, var(--interactive-accent) 22%, transparent);
+}
+.pnr-undo .pnr-timer {
+	background: color-mix(in srgb, var(--color-green) 16%, transparent);
+}
+@keyframes pnr-drain {
+	from {
+		transform: scaleX(1);
+	}
+	to {
+		transform: scaleX(0);
+	}
 }
 .pnr-view button.pnr-btn {
 	display: inline-flex;
