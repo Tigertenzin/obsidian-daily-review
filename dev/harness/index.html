@@ -14,6 +14,8 @@
 	.workspace-leaf-content { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 	.workspace-leaf-content > .view-content { flex: 1; min-height: 0; }
 	.view-header { position: static !important; }
+	/* iOS Obsidian draws buttons as 44px touch targets */
+	.is-phone { --input-height: 44px; }
 	/* A stand-in for the floating mobile navbar */
 	.mobile-navbar { z-index: 50; box-shadow: var(--shadow-l); align-items: center; }
 	.mobile-navbar-actions { display: flex; gap: 8px; width: 100%; justify-content: space-around; }

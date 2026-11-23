@@ -6,6 +6,7 @@
  * Builds dev/harness into dev/.local, serves it, and saves screenshots of each scenario to
  * dev/.local/shots/. Needs dev/.local/app.css: Obsidian's stylesheet, copied from the app
  * (it is not committed). Pass a filter to only run scenarios whose name contains it.
+ * THEME=<name> also loads dev/.local/themes/<name>.css, a community theme's theme.css.
  */
 import esbuild from "esbuild";
 import { createServer } from "node:http";
@@ -76,6 +77,7 @@ const states = [
 ];
 
 const filter = process.argv[2] ?? "";
+const themeQuery = process.env.THEME ? `&css=${encodeURIComponent(process.env.THEME)}` : "";
 const browser = await webkit.launch();
 const errors = [];
 for (const size of sizes) {
@@ -86,7 +88,7 @@ for (const size of sizes) {
 		const page = await browser.newPage({ viewport: { width: size.width, height: size.height }, deviceScaleFactor: size.scale });
 		page.on("pageerror", (e) => errors.push(`${name}: ${e.message}`));
 		page.on("console", (m) => m.type() === "error" && !m.text().startsWith("Failed to load resource") && errors.push(`${name}: ${m.text()}`));
-		await page.goto(`${base}?device=${size.device}`);
+		await page.goto(`${base}?device=${size.device}${themeQuery}`);
 		await page.waitForFunction(() => window.pnrReady === true, null, { timeout: 10000 });
 		await page.waitForTimeout(300);
 		await state.run(page);

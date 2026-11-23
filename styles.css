@@ -418,10 +418,11 @@
 	align-items: center;
 	gap: var(--size-4-2);
 	max-width: 100%;
-	padding: var(--size-4-1);
+	padding: var(--pnr-bar-pad);
 	background-color: var(--background-primary);
 	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-xl, 16px);
+	/* Concentric with the buttons' corners, so the bar's edge never cuts into them */
+	border-radius: calc(var(--pnr-btn-radius) + var(--pnr-bar-pad));
 	box-shadow: var(--shadow-s);
 }
 .pnr-view button.pnr-mark.is-armed {
@@ -455,7 +456,21 @@
 		background-size: 0% 100%;
 	}
 }
+/* Our own size and corners rather than the theme's, which on phones are 44px touch targets */
+.pnr-view {
+	--pnr-btn-height: var(--input-height, 30px);
+	--pnr-btn-radius: var(--radius-m, 8px);
+	--pnr-bar-pad: 5px;
+}
+.is-mobile .pnr-view {
+	--pnr-btn-height: 36px;
+}
 .pnr-view button.pnr-btn {
+	height: var(--pnr-btn-height);
+	min-height: 0;
+	padding-block: 0;
+	border-radius: var(--pnr-btn-radius);
+	corner-shape: round;
 	display: inline-flex;
 	align-items: center;
 	gap: var(--size-4-1);
@@ -467,7 +482,22 @@
 	flex: 0 1 auto;
 	overflow: hidden;
 }
-.pnr-view button.pnr-mark > span:last-child {
+.pnr-mark-faces {
+	display: grid;
+	min-width: 0;
+}
+.pnr-mark-face {
+	grid-area: 1 / 1;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--size-4-1);
+	min-width: 0;
+}
+.pnr-mark-face.is-hidden {
+	visibility: hidden;
+}
+.pnr-mark-text {
 	overflow: hidden;
 	text-overflow: ellipsis;
 }

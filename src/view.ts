@@ -786,21 +786,30 @@ export class ReviewView extends ItemView {
 
 		const ks = this.settings.kinds[e.kind];
 		const mark = bar.createEl("button", { cls: "pnr-btn pnr-mark" });
+		// Both labels are laid over each other and only one is shown, so the button keeps
+		// the width of the longer one and doesn't jump when it switches to "Confirm".
+		const faces = mark.createSpan({ cls: "pnr-mark-faces" });
+		const face = (icon: string, text: string, shown: boolean) => {
+			const f = faces.createSpan({ cls: "pnr-mark-face" + (shown ? "" : " is-hidden") });
+			if (!shown) f.setAttr("aria-hidden", "true");
+			setIcon(f.createSpan(), icon);
+			f.createSpan({ cls: "pnr-mark-text", text });
+		};
 		if (!e.needsReview) {
-			setIcon(mark.createSpan(), "rotate-ccw");
-			mark.createSpan({ text: "Mark unreviewed" });
-		} else if (armed) {
-			mark.addClass("is-armed");
-			this.addTimer(mark, CONFIRM_MS, armed.until - now);
-			setIcon(mark.createSpan(), "check-check");
-			const narrow = this.contentEl.hasClass("is-narrow");
-			mark.createSpan({ text: e.open > 0 ? (narrow ? `Confirm (${e.open} open)` : `Confirm · ${e.open} still open`) : (narrow ? "Confirm" : "Confirm reviewed") });
-			mark.setAttr("aria-label", "Click or press Enter again to mark reviewed. Esc cancels.");
+			face("rotate-ccw", "Mark unreviewed", true);
 		} else {
-			mark.addClass("mod-cta");
-			setIcon(mark.createSpan(), "check");
-			mark.createSpan({ text: "Mark reviewed" });
-			mark.setAttr("aria-label", "Mark reviewed (Enter)");
+			const narrow = this.contentEl.hasClass("is-narrow");
+			const confirm = e.open > 0 ? (narrow ? `Confirm (${e.open} open)` : `Confirm · ${e.open} still open`) : (narrow ? "Confirm" : "Confirm reviewed");
+			face("check", "Mark reviewed", !armed);
+			face("check-check", confirm, !!armed);
+			if (armed) {
+				mark.addClass("is-armed");
+				this.addTimer(mark, CONFIRM_MS, armed.until - now);
+				mark.setAttr("aria-label", "Click or press Enter again to mark reviewed. Esc cancels.");
+			} else {
+				mark.addClass("mod-cta");
+				mark.setAttr("aria-label", "Mark reviewed (Enter)");
+			}
 		}
 		if (!ks.canMarkReviewed) {
 			mark.disabled = true;

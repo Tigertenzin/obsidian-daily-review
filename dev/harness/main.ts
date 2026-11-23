@@ -3,6 +3,7 @@
  * a few generic example notes. URL parameters:
  *   device=phone|tablet|desktop   body classes Obsidian would set (phone adds the floating nav)
  *   theme=light|dark
+ *   css=<name>                    also load dev/.local/themes/<name>.css (a community theme)
  */
 import { parse as parseYaml } from "yaml";
 import { Events, installDomHelpers, moment, Platform, Scope, TFile } from "./obsidian-mock";
@@ -16,6 +17,11 @@ const params = new URLSearchParams(location.search);
 const device = params.get("device") ?? "desktop";
 const theme = params.get("theme") ?? "light";
 document.body.addClass(theme === "dark" ? "theme-dark" : "theme-light");
+const themeCss = params.get("css");
+if (themeCss) {
+	const link = document.head.createEl("link", { attr: { rel: "stylesheet", href: `themes/${themeCss}.css` } });
+	await new Promise((r) => link.addEventListener("load", r, { once: true }));
+}
 if (device !== "desktop") {
 	document.body.addClass("is-mobile");
 	Platform.isMobile = true;
