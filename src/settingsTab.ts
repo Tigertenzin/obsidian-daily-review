@@ -1,8 +1,11 @@
-import { App, PluginSettingTab, setIcon, Setting } from "obsidian";
+import { AbstractInputSuggest, App, moment, PluginSettingTab, setIcon, Setting, TFolder } from "obsidian";
+import { compilePattern, extraLabel, matchExtraName } from "./core/extras";
 import { describeFormat } from "./core/queue";
 import { typeForHeading } from "./core/parse";
+import { statusFieldFor } from "./core/review";
 import {
-	HighlightStyle, ItemType, Kind, KINDS, MatchMode, MissingStatus, OTHER_ID, UnknownMarks,
+	DEFAULT_EXTRA_FOLDER, ExtraFolder, ExtraLayout, HighlightStyle, ItemType, Kind, KINDS, MatchMode, MissingStatus,
+	OTHER_ID, UnknownMarks,
 } from "./core/settings";
 import type PeriodicNoteReviewPlugin from "./main";
 import type { NoteStore } from "./store";
@@ -33,6 +36,43 @@ function countText(n: number): string {
 	if (n === 0) return "No notes in your folder match yet.";
 	return `Matches ${n} ${n === 1 ? "note" : "notes"} in your folder.`;
 }
+
+/** Type-ahead for a folder path: every folder in the vault whose path contains the query. */
+class FolderSuggest extends AbstractInputSuggest<string> {
+	constructor(app: App, private input: HTMLInputElement, private onPick: (path: string) => void) {
+		super(app, input);
+	}
+
+	protected getSuggestions(query: string): string[] {
+		const q = query.trim().toLowerCase();
+		return this.app.vault.getAllLoadedFiles()
+			.filter((f): f is TFolder => f instanceof TFolder && !f.isRoot())
+			.map((f) => f.path)
+			.filter((p) => p.toLowerCase().includes(q))
+			.sort((a, b) => a.localeCompare(b))
+			.slice(0, 50);
+	}
+
+	renderSuggestion(path: string, el: HTMLElement): void {
+		el.setText(path);
+	}
+
+	selectSuggestion(path: string): void {
+		this.input.value = path;
+		this.onPick(path);
+		this.close();
+	}
+}
+
+/** Pattern examples shown under each extra folder's file name pattern. */
+const PATTERN_HINTS: [string, string][] = [
+	["{date}.*", "The date, then anything (or nothing). \"2026-11-22 call with Sam\""],
+	["{date}", "Only the date. \"2026-11-22\""],
+	["{date} - .+", "The date, \" - \", then a name. \"2026-11-22 - groceries\""],
+	[".* {date}", "The date at the end. \"Meeting notes 2026-11-22\""],
+	["(Call|Meeting) {date}.*", "Only names that start with Call or Meeting."],
+	["{date}(?! draft).*", "Anything after the date, except \" draft\"."],
+];
 
 export class ReviewSettingTab extends PluginSettingTab {
 	private sharedFieldHints: { kind: Kind; el: HTMLElement; input?: HTMLInputElement }[] = [];
@@ -114,6 +154,9 @@ export class ReviewSettingTab extends PluginSettingTab {
 		// ------------------------------------------------------------ one section per kind
 		for (const k of KINDS) this.renderKind(el, k);
 		this.refreshPreviews();
+
+		// ------------------------------------------------------------ extra folders
+		this.renderExtraFolders(el);
 
 		// ------------------------------------------------------------ item types
 		new Setting(el).setName("Item types").setHeading();
@@ -514,5 +557,253 @@ export class ReviewSettingTab extends PluginSettingTab {
 			cls: "pnr-preview",
 			text: index.slice(0, 40).map(([h, n]) => `${h || "(empty)"} (${n})`).join(", ") + (index.length > 40 ? "…" : ""),
 		});
+	}
+
+	// ---------------------------------------------------------------- extra folders
+
+	private renderExtraFolders(el: HTMLElement) {
+		new Setting(el).setName("Extra folders").setHeading();
+		el.createEl("p", {
+			cls: "setting-item-description",
+			text: "Notes elsewhere with a date in their file name, such as quick notes, call notes or clippings. Each one shows up as a scrap with the daily note for its date, or on a page of its own for days without one. Scraps have their own review state, and their open items count toward that day.",
+		});
+		new Setting(el)
+			.setName("Show a day's scraps")
+			.setDesc("Below: the daily note and its scraps make one page, marked reviewed together. Own pages: each scrap is a page after its day's note, reviewed on its own. The \"Show extra notes below the daily note or as their own pages\" command switches between them.")
+			.addDropdown((d) => d
+				.addOptions({ below: "Below the daily note", pages: "As their own pages" })
+				.setValue(this.s.extraLayout)
+				.onChange((v) => {
+					this.s.extraLayout = v as ExtraLayout;
+					this.save(false);
+				}));
+		const list = el.createDiv({ cls: "pnr-types" });
+		this.s.extraFolders.forEach((f, i) => this.renderExtraFolder(list, f, i));
+		new Setting(el).addButton((b) => b.setButtonText("Add extra folder").onClick(() => {
+			const taken = new Set(this.s.extraFolders.map((f) => f.id));
+			let n = this.s.extraFolders.length + 1;
+			while (taken.has(`extra-${n}`)) n++;
+			this.s.extraFolders.push({ ...DEFAULT_EXTRA_FOLDER, id: `extra-${n}` });
+			this.save();
+			this.display();
+		}));
+	}
+
+	private renderExtraFolder(parent: HTMLElement, f: ExtraFolder, i: number) {
+		const box = parent.createDiv({ cls: "pnr-type-box pnr-extra-box" });
+		const setColor = () => box.style.setProperty("--pnr-color", f.color || "var(--color-yellow)");
+		setColor();
+		const folders = this.s.extraFolders;
+		const preview = createDiv({ cls: "pnr-preview pnr-extra-preview" });
+		const refresh = () => this.refreshExtraPreview(preview, f);
+		const changed = (rebuild = true) => {
+			this.save(rebuild);
+			refresh();
+		};
+
+		const head = new Setting(box)
+			.setName(extraLabel(f))
+			.setClass("pnr-type-head")
+			.addColorPicker((c) => c.setValue(f.color || "#e0b400").onChange((v) => {
+				f.color = v;
+				setColor();
+				this.save(false);
+			}))
+			.addExtraButton((b) => b.setIcon("arrow-up").setTooltip("Move up").setDisabled(i === 0).onClick(() => {
+				[folders[i - 1], folders[i]] = [folders[i], folders[i - 1]];
+				this.save();
+				this.display();
+			}))
+			.addExtraButton((b) => b.setIcon("arrow-down").setTooltip("Move down").setDisabled(i === folders.length - 1).onClick(() => {
+				[folders[i + 1], folders[i]] = [folders[i], folders[i + 1]];
+				this.save();
+				this.display();
+			}))
+			.addExtraButton((b) => b.setIcon("trash-2").setTooltip("Remove").onClick(() => {
+				folders.splice(i, 1);
+				this.save();
+				this.display();
+			}))
+			.addToggle((tg) => tg.setTooltip("Enabled").setValue(f.enabled).onChange((v) => {
+				f.enabled = v;
+				changed();
+			}));
+		const setTitle = () => head.nameEl.setText(extraLabel(f));
+
+		new Setting(box)
+			.setName("Folder")
+			.setDesc("Start typing to search your folders. Leave empty for the whole vault.")
+			.setClass("pnr-sub")
+			.addText((t) => {
+				t.setPlaceholder("Folder path").setValue(f.folder).onChange((v) => {
+					f.folder = v.trim();
+					setTitle();
+					changed();
+				});
+				new FolderSuggest(this.app, t.inputEl, (path) => {
+					f.folder = path;
+					setTitle();
+					changed();
+				});
+			});
+		new Setting(box)
+			.setName("Include subfolders")
+			.setClass("pnr-sub")
+			.addToggle((t) => t.setValue(f.subfolders).onChange((v) => {
+				f.subfolders = v;
+				changed();
+			}));
+		new Setting(box)
+			.setName("Label")
+			.setDesc("Shown on each scrap. Leave empty to use the folder's name.")
+			.setClass("pnr-sub")
+			.addText((t) => t.setPlaceholder(extraLabel({ ...f, label: "" })).setValue(f.label).onChange((v) => {
+				f.label = v;
+				setTitle();
+				this.save(false);
+			}));
+
+		const fmt = new Setting(box).setName("Date format").setClass("pnr-sub");
+		const fmtHint = fmt.descEl.createDiv();
+		const showFormat = () => {
+			fmtHint.empty();
+			const format = f.dateFormat.trim();
+			const today = moment();
+			const sample = format ? today.format(format) : "";
+			const line = fmtHint.createDiv();
+			line.appendText("moment.js tokens, like the title formats above. Today: ");
+			line.createEl("code", { text: sample || "(empty)" });
+			const back = sample ? moment(sample, format, true) : null;
+			if (!back?.isValid() || !back.isSame(today, "day")) {
+				fmtHint.createDiv({ cls: "pnr-format-warn", text: "This format doesn't read back as today. It needs a year, month and day, such as YYYY-MM-DD or YYYYMMDD." });
+			}
+		};
+		fmt.addText((t) => t.setPlaceholder("YYYY-MM-DD").setValue(f.dateFormat).onChange((v) => {
+			f.dateFormat = v;
+			showFormat();
+			changed();
+		}));
+		showFormat();
+
+		const pat = new Setting(box).setName("File name pattern").setClass("pnr-sub pnr-pattern");
+		pat.descEl.appendText("A regular expression for the whole file name (without .md), ignoring case. ");
+		pat.descEl.createEl("code", { text: "{date}" });
+		pat.descEl.appendText(" stands for the date; ");
+		pat.descEl.createEl("code", { text: ".*" });
+		pat.descEl.appendText(" after it ignores any extra text. Without {date}, the name must start with the date and the pattern is what may follow it.");
+		const patWarn = pat.descEl.createDiv({ cls: "pnr-format-warn" });
+		const showPatternError = () => {
+			const c = compilePattern(f.pattern);
+			patWarn.setText(c.error !== undefined ? `Not a valid pattern: ${c.error}` : "");
+		};
+		let patInput: HTMLInputElement | null = null;
+		pat.addText((t) => {
+			patInput = t.inputEl;
+			t.setPlaceholder("{date}.*").setValue(f.pattern).onChange((v) => {
+				f.pattern = v;
+				showPatternError();
+				changed();
+			});
+		});
+		showPatternError();
+		const hints = box.createEl("details", { cls: "pnr-pattern-hints" });
+		hints.createEl("summary", { text: "Pattern examples" });
+		const table = hints.createDiv({ cls: "pnr-hint-list" });
+		for (const [p, what] of PATTERN_HINTS) {
+			const row = table.createDiv({ cls: "pnr-hint-row" });
+			const code = row.createEl("button", { cls: "pnr-hint-code", text: p, attr: { "aria-label": "Use this pattern" } });
+			code.addEventListener("click", () => {
+				f.pattern = p;
+				if (patInput) patInput.value = p;
+				showPatternError();
+				changed();
+			});
+			row.createSpan({ cls: "pnr-hint-text", text: what });
+		}
+		hints.createDiv({
+			cls: "pnr-hint-foot",
+			text: "Handy pieces: .* any text, .+ at least one character, \\d a digit, (a|b) either, (x)? optional, \\. a literal dot. Click an example to use it.",
+		});
+
+		const field = new Setting(box).setName("Review field").setClass("pnr-sub");
+		const daily = statusFieldFor("daily", this.s);
+		field.setDesc(`A true/false frontmatter property. Leave empty to use the daily notes' field, "${daily}". Mark reviewed writes true; "${this.s.unreviewedValue}" means still to review.`);
+		field.addText((t) => t.setPlaceholder(daily).setValue(f.statusField).onChange((v) => {
+			f.statusField = v.trim();
+			changed();
+		}));
+		new Setting(box)
+			.setName("When the field is missing")
+			.setDesc("\"Counts as reviewed\" keeps an old backlog out of the queue: only scraps with the field set to false show up.")
+			.setClass("pnr-sub")
+			.addDropdown((d) => d
+				.addOptions({ unreviewed: "Counts as not reviewed", reviewed: "Counts as reviewed" })
+				.setValue(f.missingStatus)
+				.onChange((v) => {
+					f.missingStatus = v as MissingStatus;
+					changed();
+				}));
+		new Setting(box)
+			.setName("Type for items under no matching heading")
+			.setDesc("Scraps often have no section headings. Their items can count as one of your item types instead of Other.")
+			.setClass("pnr-sub")
+			.addDropdown((d) => {
+				d.addOption("", this.s.other.label);
+				for (const t of this.s.itemTypes) if (t.enabled) d.addOption(t.id, t.label);
+				d.setValue(f.defaultType).onChange((v) => {
+					f.defaultType = v;
+					this.save();
+				});
+			});
+
+		box.appendChild(preview);
+		refresh();
+	}
+
+	private extraTimers = new WeakMap<HTMLElement, number>();
+
+	/** "9 of 12 notes in this folder match (4 to review). For example …" */
+	private refreshExtraPreview(el: HTMLElement, f: ExtraFolder) {
+		window.clearTimeout(this.extraTimers.get(el));
+		this.extraTimers.set(el, window.setTimeout(() => {
+			el.empty();
+			if (!f.enabled) {
+				el.setText("Turned off: these notes aren't shown.");
+				return;
+			}
+			const st = this.plugin.store.extraFolderStats(f, this.s);
+			if (st.error) {
+				el.addClass("is-empty");
+				el.setText("Fix the pattern to see which notes match.");
+				return;
+			}
+			el.toggleClass("is-empty", st.matched === 0);
+			const where = f.folder.trim() ? "this folder" : "the vault";
+			if (st.files === 0) {
+				el.setText(f.folder.trim() ? "No notes in this folder." : "No notes found.");
+				return;
+			}
+			const head = el.createDiv();
+			head.createSpan({ cls: "pnr-preview-label", text: `${st.matched} of ${st.files} ${st.files === 1 ? "note" : "notes"} in ${where} match` });
+			head.appendText(st.matched > 0 ? ` (${st.toReview} to review).` : ".");
+			for (const x of st.examples) {
+				const line = el.createDiv();
+				line.createEl("code", { text: x.name });
+				line.appendText(` → ${moment(x.date, "YYYY-MM-DD").format("ddd D MMM YYYY")}`);
+			}
+			if (st.misses.length > 0) {
+				const line = el.createDiv({ cls: "pnr-preview-misses" });
+				line.appendText("Don't match: ");
+				st.misses.forEach((m, i) => {
+					if (i > 0) line.appendText(", ");
+					line.createEl("code", { text: m });
+				});
+			}
+			// A name built from today's date, to show the pattern accepting it.
+			const sample = moment().format(f.dateFormat.trim() || "YYYY-MM-DD");
+			if (st.matched === 0 && !matchExtraName(sample, f.dateFormat, f.pattern)) {
+				el.createDiv({ cls: "pnr-format-warn", text: `A name that is just today's date ("${sample}") doesn't match either.` });
+			}
+		}, 300));
 	}
 }

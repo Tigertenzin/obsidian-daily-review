@@ -4,14 +4,15 @@ import {
 import {
 	analyzeNote, domainLabel, firstLinkDomain, Item, NoteAnalysis, typeForHeading, withMark,
 } from "./core/parse";
+import { ExtraEntry, extraLabel, extraStatusField, scrapName } from "./core/extras";
 import { daysAgo } from "./core/periods";
 import {
-	FILTERS, FilterId, groupLabel, isFuture, isPast, longAge, mastheadFor, matchesFilter, matchesTypeFilter, NoteEntry,
-	openByType, rangeLabel, TypeFilterState,
+	FILTERS, FilterId, groupLabel, isFuture, isPast, longAge, mastheadFor, matchesFilter, matchesTypeFilter,
+	openByType, QueueEntry, rangeLabel, TypeFilterState,
 	shortAge, sortEntries, ticksFor, weekNumber,
 } from "./core/queue";
 import { reviewedValueFor, statusFieldFor, unreviewedValueFor, withFrontmatterValue } from "./core/review";
-import { Kind, OTHER_ID, SortMode } from "./core/settings";
+import { ExtraFolder, Kind, OTHER_ID, SortMode } from "./core/settings";
 import type PeriodicNoteReviewPlugin from "./main";
 
 export const VIEW_TYPE = "periodic-note-review";
@@ -29,6 +30,35 @@ const SORTS: { id: SortMode; label: string }[] = [
 	{ id: "most-tasks", label: "Most tasks" },
 ];
 
+/** One note drawn on the page: the periodic note, or a scrap. */
+interface Section {
+	file: TFile;
+	analysis: NoteAnalysis;
+	/** Rendered checkbox list items, matched by order to analysis.renderedItems. */
+	itemEls: HTMLElement[];
+	matched: boolean;
+	/** Its open items count toward the page: it still needs review, or nothing on the page does. */
+	counted: boolean;
+}
+
+/** A frontmatter write made by "Mark reviewed", with what undoing it writes back. */
+interface ReviewWrite {
+	path: string;
+	field: string;
+	/** The value to write back when undoing. */
+	back: string;
+	before: string;
+	after: string;
+}
+
+/** A note on a page whose review state "Mark reviewed" (or unreviewed) can change. */
+interface ReviewTarget {
+	path: string;
+	field: string;
+	reviewed: string;
+	unreviewed: string;
+}
+
 interface TasksApi {
 	executeToggleTaskDoneCommand(line: string, path: string): string;
 }
@@ -43,10 +73,7 @@ export class ReviewView extends ItemView {
 	/** "Mark reviewed" has been pressed once and is waiting for confirmation. */
 	private armed: { path: string; until: number; timer: number } | null = null;
 	/** The last "Mark reviewed", while it can still be undone. */
-	private undo: {
-		path: string; label: string; kind: Kind; field: string; before: string; after: string;
-		until: number; timer: number;
-	} | null = null;
+	private undo: { page: string; label: string; writes: ReviewWrite[]; until: number; timer: number } | null = null;
 	private actionsEl!: HTMLElement;
 
 	private topEl!: HTMLElement;
@@ -56,10 +83,8 @@ export class ReviewView extends ItemView {
 
 	private noteComponent: Component | null = null;
 	private renderToken = 0;
-	private analysis: NoteAnalysis | null = null;
-	/** Rendered checkbox list items, matched by order to analysis.renderedItems. */
-	private itemEls: HTMLElement[] = [];
-	private itemsMatched = false;
+	/** The notes drawn on the current page, in order. */
+	private sections: Section[] = [];
 
 	/** Whether future notes are unfolded in the queue; starts from the setting. */
 	private showFuture: boolean;
@@ -130,14 +155,14 @@ export class ReviewView extends ItemView {
 
 	/** Notes listed in the queue: still to review (plus reviewed ones if shown), and
 	 *  future ones only while they're unfolded. Counts at the top follow the same list. */
-	private listed(withFuture = this.showFuture): NoteEntry[] {
+	private listed(withFuture = this.showFuture): QueueEntry[] {
 		const today = this.store.today;
-		return [...this.store.entries.values()].filter((e) =>
+		return [...this.store.pages.values()].filter((e) =>
 			(e.needsReview || this.settings.showReviewed) && (withFuture || !isFuture(e, today)));
 	}
 
 	/** The queue in its current filter and sort, future notes included or not. */
-	private visible(withFuture = this.showFuture): NoteEntry[] {
+	private visible(withFuture = this.showFuture): QueueEntry[] {
 		const today = this.store.today;
 		return sortEntries(
 			this.listed(withFuture).filter((e) =>
@@ -146,12 +171,21 @@ export class ReviewView extends ItemView {
 		);
 	}
 
-	private toReview(): NoteEntry[] {
-		return [...this.store.entries.values()].filter((e) => e.needsReview && isPast(e, this.store.today));
+	private toReview(): QueueEntry[] {
+		return [...this.store.pages.values()].filter((e) => e.needsReview && isPast(e, this.store.today));
 	}
 
-	private current(): NoteEntry | null {
-		return this.currentPath ? this.store.entries.get(this.currentPath) ?? null : null;
+	private current(): QueueEntry | null {
+		return this.currentPath ? this.store.pages.get(this.currentPath) ?? null : null;
+	}
+
+	private extraFolder(id: string): ExtraFolder | undefined {
+		return this.settings.extraFolders.find((f) => f.id === id);
+	}
+
+	/** A page that is one scrap on its own (scraps shown as their own pages). */
+	private isScrapPage(e: QueueEntry): boolean {
+		return e.note === null && this.settings.extraLayout === "pages";
 	}
 
 	private pickStartNote() {
@@ -162,6 +196,8 @@ export class ReviewView extends ItemView {
 	private onStoreChanged(path: string | null) {
 		if (!this.topEl) return;
 		if (path === null) {
+			// The page may have a new key (the layout changed, or a daily note appeared).
+			if (!this.current() && this.currentPath) this.currentPath = this.store.pageKeyFor(this.currentPath);
 			if (!this.current()) this.pickStartNote();
 			this.renderAll();
 			return;
@@ -295,7 +331,7 @@ export class ReviewView extends ItemView {
 		const chips = controls.createDiv({ cls: "pnr-chips" });
 		const listed = this.listed().filter((e) => matchesTypeFilter(e, this.typeFilter));
 		for (const f of FILTERS) {
-			if (f.id !== "all" && !this.settings.kinds[f.id as Kind]?.enabled && this.filter !== f.id) continue;
+			if (!this.filterOffered(f.id) && this.filter !== f.id) continue;
 			const count = listed.filter((e) => matchesFilter(e, f.id, today)).length;
 			if (count === 0 && this.filter !== f.id) continue;
 			const chip = chips.createEl("button", { cls: "pnr-chip" });
@@ -323,6 +359,13 @@ export class ReviewView extends ItemView {
 		setIcon(qBtn.createSpan(), "list");
 		qBtn.createSpan({ text: `Queue ${this.visible().length}` });
 		qBtn.addEventListener("click", () => this.setQueueOpen(!this.queueOpen));
+	}
+
+	/** Whether a kind chip applies at all: its kind is in the review, or there are extra folders. */
+	private filterOffered(id: FilterId): boolean {
+		if (id === "all") return true;
+		if (id === "scraps") return this.settings.extraFolders.some((f) => f.enabled);
+		return !!this.settings.kinds[id as Kind]?.enabled;
 	}
 
 	/** Filters that differ from the default, for the compact Filter button's badge. */
@@ -378,7 +421,7 @@ export class ReviewView extends ItemView {
 		const kinds = panel.createDiv({ cls: "pnr-segmented" });
 		const listed = this.listed().filter((e) => matchesTypeFilter(e, this.typeFilter));
 		for (const f of FILTERS) {
-			if (f.id !== "all" && !this.settings.kinds[f.id as Kind]?.enabled) continue;
+			if (!this.filterOffered(f.id)) continue;
 			const count = listed.filter((e) => matchesFilter(e, f.id, today)).length;
 			if (count === 0 && this.filter !== f.id && f.id !== "all") continue;
 			const b = kinds.createEl("button", { cls: "pnr-seg" });
@@ -523,6 +566,8 @@ export class ReviewView extends ItemView {
 		const dateSort = this.settings.sort === "oldest" || this.settings.sort === "newest";
 		let lastGroup = "";
 		let lastPast: boolean | null = null;
+		/** The day of the last daily row, so a scrap whose day has no note gets the day shown. */
+		let lastDay = "";
 
 		if (current.length === 0 && future.length === 0) list.createDiv({ cls: "pnr-queue-empty", text: "Nothing here." });
 
@@ -530,7 +575,7 @@ export class ReviewView extends ItemView {
 		// when the newest come first.
 		const shownFuture = this.showFuture ? future : [];
 		const toggle = future.length > 0 ? [null] : [];
-		const order: (NoteEntry | null)[] = this.settings.sort === "newest"
+		const order: (QueueEntry | null)[] = this.settings.sort === "newest"
 			? [...toggle, ...shownFuture, ...current]
 			: [...current, ...toggle, ...shownFuture];
 
@@ -538,6 +583,7 @@ export class ReviewView extends ItemView {
 			if (e === null) {
 				this.renderFutureToggle(list, future.length);
 				lastGroup = "";
+				lastDay = "";
 				continue;
 			}
 			const past = isPast(e, today);
@@ -550,6 +596,13 @@ export class ReviewView extends ItemView {
 					lastGroup = g;
 				}
 			}
+			if (this.isScrapPage(e) && e.start !== lastDay) {
+				const s = moment(e.start, "YYYY-MM-DD");
+				const head = list.createDiv({ cls: "pnr-row-dayhead" });
+				head.createSpan({ cls: "pnr-row-day", text: s.format("D") });
+				head.createSpan({ cls: "pnr-row-sub", text: s.format("ddd") });
+			}
+			if (e.kind === "daily") lastDay = e.start;
 			this.renderRow(list, e, today);
 		}
 
@@ -578,7 +631,7 @@ export class ReviewView extends ItemView {
 		});
 	}
 
-	private renderRow(list: HTMLElement, e: NoteEntry, today: string): HTMLElement {
+	private renderRow(list: HTMLElement, e: QueueEntry, today: string): HTMLElement {
 		const row = list.createDiv({ cls: "pnr-row" });
 		row.setAttr("role", "button");
 		row.setAttr("tabindex", "0");
@@ -590,10 +643,22 @@ export class ReviewView extends ItemView {
 
 		const date = row.createDiv({ cls: "pnr-row-date" });
 		const s = moment(e.start, "YYYY-MM-DD");
-		switch (e.kind) {
+		const scrapPage = this.isScrapPage(e);
+		switch (scrapPage ? "scrap" : e.kind) {
+			case "scrap": {
+				// A scrap's own page sits under its day: a small note icon and its name.
+				const x = e.scraps[0];
+				row.addClass("is-scrap");
+				row.style.setProperty("--pnr-scrap-color", this.scrapColor(x));
+				setIcon(date.createSpan({ cls: "pnr-row-scrap-icon" }), "sticky-note");
+				date.createSpan({ cls: "pnr-row-scrap-title", text: this.scrapName(x) });
+				date.setAttr("aria-label", `${extraLabel(this.extraFolder(x.folderId) ?? this.missingFolder())}: ${x.title}`);
+				break;
+			}
 			case "daily":
 				date.createSpan({ cls: "pnr-row-day", text: s.format("D") });
 				date.createSpan({ cls: "pnr-row-sub", text: s.format("ddd") });
+				if (e.note === null) row.addClass("is-scraps-only");
 				break;
 			case "weekly":
 				date.createSpan({ cls: "pnr-row-label", text: `Week ${weekNumber(e, this.settings.kinds.weekly.titleFormat)}` });
@@ -615,6 +680,13 @@ export class ReviewView extends ItemView {
 
 		row.createSpan({ cls: "pnr-row-leader" });
 		const ticks = row.createDiv({ cls: "pnr-ticks" });
+		if (!scrapPage && e.scraps.length > 0) {
+			// The day's scraps: one small note per scrap, before the ticks.
+			const pile = ticks.createSpan({ cls: "pnr-row-scraps" });
+			setIcon(pile.createSpan(), "sticky-note");
+			if (e.scraps.length > 1) pile.createSpan({ text: String(e.scraps.length) });
+			pile.setAttr("aria-label", `${e.scraps.length} ${e.scraps.length === 1 ? "scrap" : "scraps"}`);
+		}
 		const all = ticksFor(e, this.settings);
 		if (!e.needsReview) {
 			ticks.createSpan({ cls: "pnr-row-clear", text: "reviewed" });
@@ -629,7 +701,7 @@ export class ReviewView extends ItemView {
 			row.setAttr("aria-label", this.countSummary(e));
 		}
 
-		row.createDiv({ cls: "pnr-row-age", text: shortAge(e, today) });
+		row.createDiv({ cls: "pnr-row-age", text: scrapPage ? "" : shortAge(e, today) });
 		const go = () => {
 			this.goTo(e.path);
 			if (this.contentEl.hasClass("is-narrow")) this.setQueueOpen(false);
@@ -645,7 +717,7 @@ export class ReviewView extends ItemView {
 		return row;
 	}
 
-	private countSummary(e: NoteEntry): string {
+	private countSummary(e: QueueEntry): string {
 		return this.typeOrder()
 			.filter((id) => e.counts[id])
 			.map((id) => `${e.counts[id].open + e.counts[id].tasks} ${this.labelFor(id)}`)
@@ -684,7 +756,7 @@ export class ReviewView extends ItemView {
 	 * if that's a past note still to review, else the next one after it, else the empty
 	 * state. Never moves on to an in-progress note.
 	 */
-	private goToNextAfter(prev: NoteEntry | null, prevIndex?: number) {
+	private goToNextAfter(prev: QueueEntry | null, prevIndex?: number) {
 		const vis = this.visible();
 		const today = this.store.today;
 		let from = prevIndex ?? 0;
@@ -697,16 +769,38 @@ export class ReviewView extends ItemView {
 		this.goTo(next?.path ?? null);
 	}
 
+	/** Open the page's note (or, on a page with no periodic note, its first scrap). */
 	openInEditor(newTab = true) {
-		const file = this.currentFile();
-		if (!file) return;
-		void this.app.workspace.getLeaf(newTab ? "tab" : false).openFile(file);
+		const e = this.current();
+		const path = e?.note?.path ?? e?.scraps[0]?.path;
+		if (path) this.openPath(path, newTab);
 	}
 
-	private currentFile(): TFile | null {
-		if (!this.currentPath) return null;
-		const f = this.app.vault.getAbstractFileByPath(this.currentPath);
+	private openPath(path: string, newTab = true) {
+		const file = this.fileAt(path);
+		if (file) void this.app.workspace.getLeaf(newTab ? "tab" : false).openFile(file);
+	}
+
+	private fileAt(path: string): TFile | null {
+		const f = this.app.vault.getAbstractFileByPath(path);
 		return f instanceof TFile ? f : null;
+	}
+
+	/** A stand-in for a scrap whose folder was removed from the settings since it was read. */
+	private missingFolder(): ExtraFolder {
+		return {
+			id: "", folder: "", label: "Scrap", color: "", enabled: true, subfolders: true, dateFormat: "",
+			pattern: "", statusField: "", missingStatus: "unreviewed", defaultType: "",
+		};
+	}
+
+	/** A scrap's name without the date, for places that already show the day. */
+	private scrapName(x: ExtraEntry): string {
+		return scrapName(x.title, x.date, this.extraFolder(x.folderId)?.dateFormat ?? "");
+	}
+
+	private scrapColor(x: ExtraEntry): string {
+		return this.extraFolder(x.folderId)?.color || "var(--color-yellow)";
 	}
 
 	// ---------------------------------------------------------------- the note
@@ -714,27 +808,88 @@ export class ReviewView extends ItemView {
 	private async renderNote(keepScroll: boolean) {
 		const token = ++this.renderToken;
 		const e = this.current();
-		const file = this.currentFile();
-		if (!e || !file) {
+		const members: { file: TFile; scrap: ExtraEntry | null; needsReview: boolean }[] = [];
+		if (e?.note) {
+			const f = this.fileAt(e.note.path);
+			if (f) members.push({ file: f, scrap: null, needsReview: e.note.needsReview });
+		}
+		for (const x of e?.scraps ?? []) {
+			const f = this.fileAt(x.path);
+			if (f) members.push({ file: f, scrap: x, needsReview: x.needsReview });
+		}
+		if (!e || members.length === 0) {
 			this.renderEmpty();
 			return;
 		}
-		const raw = await this.app.vault.cachedRead(file);
+		const raws = await Promise.all(members.map((m) => this.app.vault.cachedRead(m.file)));
 		if (token !== this.renderToken) return;
-		const a = analyzeNote(raw, file.basename, this.settings);
+		const sections: Section[] = members.map((m, i) => ({
+			file: m.file,
+			analysis: analyzeNote(raws[i], m.file.basename, this.settings,
+				m.scrap ? this.extraFolder(m.scrap.folderId)?.defaultType || undefined : undefined),
+			itemEls: [],
+			matched: false,
+			counted: !e.needsReview || m.needsReview,
+		}));
 
 		const sheet = createDiv({ cls: "pnr-sheet" });
-		const cssclasses = this.app.metadataCache.getFileCache(file)?.frontmatter?.cssclasses;
-		const extra = Array.isArray(cssclasses) ? cssclasses : typeof cssclasses === "string" ? cssclasses.split(/[\s,]+/) : [];
-		for (const c of extra) if (typeof c === "string" && c) sheet.addClass(c);
+		if (e.note) {
+			const cssclasses = this.app.metadataCache.getFileCache(sections[0].file)?.frontmatter?.cssclasses;
+			const extra = Array.isArray(cssclasses) ? cssclasses : typeof cssclasses === "string" ? cssclasses.split(/[\s,]+/) : [];
+			for (const c of extra) if (typeof c === "string" && c) sheet.addClass(c);
+		}
+		const scrapPage = this.isScrapPage(e);
+		if (scrapPage) {
+			sheet.addClass("is-scrap");
+			sheet.style.setProperty("--pnr-scrap-color", this.scrapColor(e.scraps[0]));
+		}
 
 		this.renderMasthead(sheet, e);
-		this.renderSummary(sheet, a);
+		this.renderSummary(sheet, sections.filter((x) => x.counted).map((x) => x.analysis));
 
-		const noteEl = sheet.createDiv({ cls: "pnr-note markdown-rendered markdown-preview-view" });
 		const component = new Component();
 		component.load();
-		await MarkdownRenderer.render(this.app, a.renderText, noteEl, file.path, component);
+		const bodies: HTMLElement[] = [];
+		const render = async (sec: Section, el: HTMLElement) => {
+			bodies.push(el);
+			await MarkdownRenderer.render(this.app, sec.analysis.renderText, el, sec.file.path, component);
+		};
+		/** Sheets drawn after the main one (a day's scraps). */
+		const extraSheets: HTMLElement[] = [];
+		let next = 0;
+		if (e.note) {
+			await render(sections[next++], sheet.createDiv({ cls: "pnr-note markdown-rendered markdown-preview-view" }));
+		}
+		if (scrapPage) {
+			await render(sections[next++], sheet.createDiv({ cls: "pnr-note markdown-rendered markdown-preview-view" }));
+		} else if (next < sections.length) {
+			// Each scrap is a sheet of its own under the day's sheet, like a scrap's own page.
+			if (!e.note) sheet.createDiv({ cls: "pnr-scraps-heading", text: "No daily note for this day" });
+			const pile = createDiv({ cls: "pnr-scraps" });
+			extraSheets.push(pile);
+			for (const x of e.scraps) {
+				if (next >= sections.length) break;
+				const sec = sections[next];
+				if (sec.file.path !== x.path) continue;
+				next++;
+				const card = pile.createDiv({ cls: "pnr-sheet is-scrap pnr-scrap-sheet" });
+				card.style.setProperty("--pnr-scrap-color", this.scrapColor(x));
+				card.toggleClass("is-reviewed", !x.needsReview);
+				const head = card.createDiv({ cls: "pnr-scrap-head" });
+				const folder = this.extraFolder(x.folderId) ?? this.missingFolder();
+				head.createSpan({ cls: "pnr-scrap-folder", text: extraLabel(folder) });
+				const title = head.createEl("a", {
+					cls: "pnr-scrap-title", text: this.scrapName(x), attr: { href: "#", "aria-label": `Open ${x.title} in the editor` },
+				});
+				title.addEventListener("click", (evt) => {
+					evt.preventDefault();
+					this.openPath(x.path, true);
+				});
+				if (!x.needsReview && e.needsReview) head.createSpan({ cls: "pnr-reviewed-pill", text: "Reviewed" });
+				await render(sec, card.createDiv({ cls: "pnr-note pnr-scrap-body markdown-rendered markdown-preview-view" }));
+				if (token !== this.renderToken) break;
+			}
+		}
 		if (token !== this.renderToken) {
 			component.unload();
 			return;
@@ -744,40 +899,69 @@ export class ReviewView extends ItemView {
 		if (this.noteComponent) this.removeChild(this.noteComponent);
 		this.noteComponent = component;
 		this.addChild(component);
-		this.analysis = a;
+		this.sections = sections;
 		this.sheetEl.empty();
 		this.sheetEl.appendChild(sheet);
+		for (const x of extraSheets) this.sheetEl.appendChild(x);
 		this.renderActions();
-		this.decorate(noteEl, a, file);
+		sections.forEach((sec, i) => this.decorate(bodies[i], sec, sheet));
 		if (keepScroll) this.mainEl.scrollTop = scroll;
 		for (const s of ["tint", "bar", "checkbox", "none"]) {
 			this.contentEl.toggleClass("pnr-highlight-" + s, s === this.settings.highlightStyle);
 		}
 	}
 
-	private renderMasthead(sheet: HTMLElement, e: NoteEntry) {
+	private renderMasthead(sheet: HTMLElement, e: QueueEntry) {
 		const m = mastheadFor(e, this.settings);
 		const head = sheet.createDiv({ cls: "pnr-masthead" });
-		head.createDiv({ cls: "pnr-kicker", text: m.kicker });
-		head.createDiv({ cls: "pnr-headline", text: m.headline });
+		if (this.isScrapPage(e)) {
+			const x = e.scraps[0];
+			const folder = this.extraFolder(x.folderId) ?? this.missingFolder();
+			head.createDiv({ cls: "pnr-kicker", text: `${extraLabel(folder)} · ${moment(e.start, "YYYY-MM-DD").format("ddd D MMMM YYYY")}` });
+			head.createDiv({ cls: "pnr-headline pnr-scrap-headline", text: this.scrapName(x) });
+		} else {
+			head.createDiv({ cls: "pnr-kicker", text: m.kicker });
+			head.createDiv({ cls: "pnr-headline", text: m.headline });
+		}
 		const meta = head.createDiv({ cls: "pnr-meta" });
 		meta.createSpan({ text: longAge(e, this.store.today) });
 		const vis = this.visible();
 		const i = vis.findIndex((x) => x.path === e.path);
 		if (i !== -1) meta.createSpan({ text: `${i + 1} / ${vis.length}` });
+		if (!this.isScrapPage(e) && e.scraps.length > 0) {
+			const n = e.scraps.length;
+			const pile = meta.createSpan({ cls: "pnr-meta-scraps" });
+			setIcon(pile.createSpan(), "sticky-note");
+			pile.createSpan({ text: `${n} ${n === 1 ? "scrap" : "scraps"}` });
+		}
 		if (!e.needsReview) meta.createSpan({ cls: "pnr-reviewed-pill", text: "Reviewed" });
 		else if (!isPast(e, this.store.today)) meta.createSpan({ cls: "pnr-progress-pill", text: "In progress" });
 	}
 
-	private renderSummary(sheet: HTMLElement, a: NoteAnalysis) {
+	/** Type chips and totals for the notes on the page that count. */
+	private renderSummary(sheet: HTMLElement, analyses: NoteAnalysis[]) {
+		const counts: Record<string, { open: number; tasks: number }> = {};
+		let open = 0;
+		let tasks = 0;
+		let settled = 0;
+		for (const a of analyses) {
+			for (const [id, c] of Object.entries(a.counts)) {
+				const t = counts[id] ?? (counts[id] = { open: 0, tasks: 0 });
+				t.open += c.open;
+				t.tasks += c.tasks;
+			}
+			open += a.open;
+			tasks += a.tasks;
+			settled += a.settled;
+		}
 		const sum = sheet.createDiv({ cls: "pnr-summary" });
-		if (a.open === 0) {
+		if (open === 0) {
 			sum.createSpan({ cls: "pnr-summary-clear", text: "Nothing left open. Safe to mark reviewed." });
-			if (a.settled > 0) sum.createSpan({ cls: "pnr-summary-meta", text: `${a.settled} settled` });
+			if (settled > 0) sum.createSpan({ cls: "pnr-summary-meta", text: `${settled} settled` });
 			return;
 		}
 		for (const id of this.typeOrder()) {
-			const c = a.counts[id];
+			const c = counts[id];
 			if (!c) continue;
 			const chip = sum.createEl("button", { cls: "pnr-type-chip" });
 			chip.style.setProperty("--pnr-color", this.colorFor(id));
@@ -786,9 +970,9 @@ export class ReviewView extends ItemView {
 			if (c.tasks > 0) chip.setAttr("aria-label", `${c.tasks} tagged ${this.settings.taskTag}`);
 			chip.addEventListener("click", () => this.scrollToFirst(id));
 		}
-		const parts = [`${a.open} open`];
-		if (a.tasks) parts.push(`${a.tasks} ${a.tasks === 1 ? "task" : "tasks"}`);
-		if (a.settled) parts.push(`${a.settled} settled`);
+		const parts = [`${open} open`];
+		if (tasks) parts.push(`${tasks} ${tasks === 1 ? "task" : "tasks"}`);
+		if (settled) parts.push(`${settled} settled`);
 		sum.createSpan({ cls: "pnr-summary-meta", text: parts.join(" · ") });
 	}
 
@@ -829,7 +1013,6 @@ export class ReviewView extends ItemView {
 		open.setAttr("aria-label", "Open in the editor (o)");
 		open.addEventListener("click", () => this.openInEditor(true));
 
-		const ks = this.settings.kinds[e.kind];
 		const mark = bar.createEl("button", { cls: "pnr-btn pnr-mark" });
 		// Both labels are laid over each other and only one is shown, so the button keeps
 		// the width of the longer one and doesn't jump when it switches to "Confirm".
@@ -856,7 +1039,7 @@ export class ReviewView extends ItemView {
 				mark.setAttr("aria-label", "Mark reviewed (Enter)");
 			}
 		}
-		if (!ks.canMarkReviewed) {
+		if (this.reviewTargets(e, e.needsReview).length === 0) {
 			mark.disabled = true;
 			mark.setAttr("aria-label", `Set "${statusFieldFor(e.kind, this.settings)}" in the note to change its review state`);
 		}
@@ -897,32 +1080,31 @@ export class ReviewView extends ItemView {
 		if (render) this.renderActions();
 	}
 
-	/** Put the note back the way it was before the last "Mark reviewed", and go back to it. */
+	/** Put the notes back the way they were before the last "Mark reviewed", and go back to the page. */
 	async undoLast() {
 		const u = this.undo;
 		if (!u) return;
 		this.clearUndo(false);
-		const f = this.app.vault.getAbstractFileByPath(u.path);
-		if (!(f instanceof TFile)) {
-			this.renderActions();
-			return;
+		let failed = false;
+		for (const w of u.writes) {
+			const f = this.fileAt(w.path);
+			if (!f) continue;
+			try {
+				await this.app.vault.process(f, (data) =>
+					// Unchanged since: restore it exactly. Edited since: just set the field back.
+					data === w.after ? w.before : withFrontmatterValue(data, w.field, w.back));
+				this.store.setNeedsReview(w.path, true);
+			} catch (err) {
+				console.error("Periodic Note Review: couldn't undo", err);
+				failed = true;
+			}
 		}
-		try {
-			await this.app.vault.process(f, (data) =>
-				// Unchanged since: restore it exactly. Edited since: just set the field back.
-				data === u.after ? u.before : withFrontmatterValue(data, u.field, unreviewedValueFor(u.kind, this.settings)));
-		} catch (err) {
-			console.error("Periodic Note Review: couldn't undo", err);
-			new Notice("Couldn't undo. See the console for details.");
-			return;
-		}
-		this.store.setNeedsReview(u.path, true);
-		this.goTo(u.path);
+		if (failed) new Notice("Couldn't undo every note. See the console for details.");
+		this.goTo(this.store.pageKeyFor(u.page) ?? u.page);
 	}
 
 	private renderEmpty() {
-		this.analysis = null;
-		this.itemEls = [];
+		this.sections = [];
 		if (this.noteComponent) this.removeChild(this.noteComponent);
 		this.noteComponent = null;
 		const el = this.sheetEl;
@@ -951,7 +1133,7 @@ export class ReviewView extends ItemView {
 		} else {
 			box.createDiv({ cls: "pnr-empty-title", text: "Pick a note from the queue" });
 		}
-		const inProgress = [...this.store.entries.values()].filter((e) => e.needsReview && !isPast(e, today)).length;
+		const inProgress = [...this.store.pages.values()].filter((e) => e.needsReview && !isPast(e, today)).length;
 		if (inProgress > 0) {
 			box.createDiv({
 				cls: "pnr-empty-meta",
@@ -962,22 +1144,23 @@ export class ReviewView extends ItemView {
 
 	// ---------------------------------------------------------------- decorating the rendered note
 
-	private decorate(noteEl: HTMLElement, a: NoteAnalysis, file: TFile) {
+	private decorate(noteEl: HTMLElement, sec: Section, sheet: HTMLElement) {
+		const { analysis: a, file } = sec;
 		const outsideEmbeds = (el: Element) => !el.parentElement?.closest(".internal-embed, .markdown-embed");
 		const lis = Array.from(noteEl.querySelectorAll<HTMLElement>("li.task-list-item")).filter(outsideEmbeds);
-		this.itemEls = lis;
-		this.itemsMatched = lis.length === a.renderedItems.length;
-		if (!this.itemsMatched) {
+		sec.itemEls = lis;
+		sec.matched = lis.length === a.renderedItems.length;
+		if (!sec.matched) {
 			console.warn(
 				`Periodic Note Review: ${file.path}: ${lis.length} rendered checkboxes, ${a.renderedItems.length} parsed. ` +
 				"Highlighting and checking off are turned off for this note.",
 			);
-			noteEl.parentElement?.querySelector(".pnr-summary")?.createDiv({
+			sheet.querySelector(".pnr-summary")?.createDiv({
 				cls: "pnr-summary-warn",
-				text: "Couldn't match this page's checkboxes to the note. Open the note to change them.",
+				text: `Couldn't match the checkboxes in "${file.basename}" to the note. Open the note to change them.`,
 			});
 		} else {
-			a.renderedItems.forEach((item, i) => this.decorateItem(lis[i], item));
+			a.renderedItems.forEach((item, i) => this.decorateItem(lis[i], item, sec.counted));
 		}
 
 		// Label section headings with their item type
@@ -991,7 +1174,7 @@ export class ReviewView extends ItemView {
 		}
 
 		// Clicks: checkboxes (captured before any other handler) and internal links
-		noteEl.addEventListener("click", (evt) => this.onNoteClick(evt, file), { capture: true });
+		noteEl.addEventListener("click", (evt) => this.onNoteClick(evt, sec), { capture: true });
 		noteEl.addEventListener("mouseover", (evt) => {
 			const link = (evt.target as HTMLElement).closest<HTMLAnchorElement>("a.internal-link");
 			if (!link) return;
@@ -1002,8 +1185,8 @@ export class ReviewView extends ItemView {
 		});
 	}
 
-	private decorateItem(li: HTMLElement, item: Item) {
-		const counted = !(item.typeId === OTHER_ID && this.settings.other.hidden);
+	private decorateItem(li: HTMLElement, item: Item, sectionCounted: boolean) {
+		const counted = sectionCounted && !(item.typeId === OTHER_ID && this.settings.other.hidden);
 		li.addClass("pnr-item", `pnr-${item.state}`);
 		li.dataset.pnrType = item.typeId;
 		li.style.setProperty("--pnr-color", this.colorFor(item.typeId));
@@ -1031,7 +1214,8 @@ export class ReviewView extends ItemView {
 		}
 	}
 
-	private onNoteClick(evt: MouseEvent, file: TFile) {
+	private onNoteClick(evt: MouseEvent, sec: Section) {
+		const file = sec.file;
 		const target = evt.target as HTMLElement;
 		const checkbox = target.closest<HTMLInputElement>("input.task-list-item-checkbox, input[type=checkbox]");
 		if (checkbox) {
@@ -1039,13 +1223,13 @@ export class ReviewView extends ItemView {
 			evt.stopPropagation();
 			evt.stopImmediatePropagation();
 			const li = checkbox.closest<HTMLElement>("li.task-list-item");
-			const idx = li ? this.itemEls.indexOf(li) : -1;
+			const idx = li ? sec.itemEls.indexOf(li) : -1;
 			if (!this.settings.allowCheckingItems) return;
-			if (!this.itemsMatched || idx === -1 || !this.analysis) {
+			if (!sec.matched || idx === -1) {
 				new Notice("Open the note to change this item.");
 				return;
 			}
-			void this.toggleItem(file, this.analysis.renderedItems[idx], li!);
+			void this.toggleItem(file, sec.analysis.renderedItems[idx], li!);
 			return;
 		}
 		const link = target.closest<HTMLAnchorElement>("a.internal-link");
@@ -1105,9 +1289,13 @@ export class ReviewView extends ItemView {
 	}
 
 	private scrollToFirst(typeId: string) {
-		if (!this.analysis || !this.itemsMatched) return;
-		const i = this.analysis.renderedItems.findIndex((it) => it.typeId === typeId && it.state === "open");
-		const li = this.itemEls[i];
+		let li: HTMLElement | undefined;
+		for (const sec of this.sections) {
+			if (!sec.counted || !sec.matched) continue;
+			const i = sec.analysis.renderedItems.findIndex((it) => it.typeId === typeId && it.state === "open");
+			li = sec.itemEls[i];
+			if (li) break;
+		}
 		if (!li) return;
 		// Scroll only the page's own scroller, vertically.
 		const main = this.mainEl;
@@ -1124,13 +1312,37 @@ export class ReviewView extends ItemView {
 
 	// ---------------------------------------------------------------- review actions
 
-	/** First call arms the button; a second call within CONFIRM_MS marks the note reviewed. */
+	/**
+	 * The notes on a page whose review state the button changes. Marking reviewed: every
+	 * note on it still to review that may be marked from here. Marking unreviewed: the
+	 * periodic note, or the scraps when the page has no periodic note.
+	 */
+	private reviewTargets(e: QueueEntry, reviewing: boolean): ReviewTarget[] {
+		const out: ReviewTarget[] = [];
+		const n = e.note;
+		if (n && this.settings.kinds[n.kind].canMarkReviewed && (reviewing ? n.needsReview : !n.needsReview)) {
+			out.push({
+				path: n.path, field: statusFieldFor(n.kind, this.settings),
+				reviewed: reviewedValueFor(n.kind, this.settings), unreviewed: unreviewedValueFor(n.kind, this.settings),
+			});
+		}
+		if (!reviewing && n) return out;
+		for (const x of e.scraps) {
+			if (reviewing ? !x.needsReview : x.needsReview) continue;
+			const f = this.extraFolder(x.folderId);
+			if (!f) continue;
+			out.push({ path: x.path, field: extraStatusField(f, this.settings), reviewed: "true", unreviewed: this.settings.unreviewedValue });
+		}
+		return out;
+	}
+
+	/** First call arms the button; a second call within CONFIRM_MS marks the page reviewed. */
 	async markReviewed() {
 		const e = this.current();
-		const file = this.currentFile();
-		if (!e || !file || this.busy) return;
+		if (!e || this.busy) return;
 		if (!e.needsReview) return;
-		if (!this.settings.kinds[e.kind].canMarkReviewed) {
+		const targets = this.reviewTargets(e, true);
+		if (targets.length === 0) {
 			new Notice(`${e.kind[0].toUpperCase()}${e.kind.slice(1)} notes can't be marked reviewed from here (see settings).`);
 			return;
 		}
@@ -1140,30 +1352,39 @@ export class ReviewView extends ItemView {
 		}
 		this.disarm(false);
 		this.busy = true;
+		const writes: ReviewWrite[] = [];
 		try {
 			const vis = this.visible();
 			const index = vis.findIndex((x) => x.path === e.path);
-			const field = statusFieldFor(e.kind, this.settings);
-			const value = reviewedValueFor(e.kind, this.settings);
-			let before = "";
-			let after = "";
-			await this.app.vault.process(file, (raw) => {
-				before = raw;
-				after = withFrontmatterValue(raw, field, value);
-				return after;
-			});
+			for (const t of targets) {
+				const file = this.fileAt(t.path);
+				if (!file) continue;
+				let before = "";
+				let after = "";
+				await this.app.vault.process(file, (raw) => {
+					before = raw;
+					after = withFrontmatterValue(raw, t.field, t.reviewed);
+					return after;
+				});
+				writes.push({ path: t.path, field: t.field, back: t.unreviewed, before, after });
+			}
 			this.clearUndo(false);
 			const timer = window.setTimeout(() => this.clearUndo(), UNDO_MS);
-			this.undo = {
-				path: e.path, label: mastheadFor(e, this.settings).headline, kind: e.kind, field, before, after,
-				until: Date.now() + UNDO_MS, timer,
-			};
-			this.store.setNeedsReview(e.path, false);
+			const label = this.isScrapPage(e) ? this.scrapName(e.scraps[0]) : mastheadFor(e, this.settings).headline;
+			this.undo = { page: e.path, label, writes, until: Date.now() + UNDO_MS, timer };
+			for (const w of writes) this.store.setNeedsReview(w.path, false);
 			if (this.settings.showReviewed) this.goToNextAfter(e, index + 1);
 			else this.goToNextAfter(e, Math.max(0, index));
 		} catch (err) {
 			console.error("Periodic Note Review: couldn't mark the note reviewed", err);
 			new Notice("Couldn't mark the note reviewed. See the console for details.");
+			// Keep what was written undoable.
+			if (writes.length > 0) {
+				for (const w of writes) this.store.setNeedsReview(w.path, false);
+				this.clearUndo(false);
+				const timer = window.setTimeout(() => this.clearUndo(), UNDO_MS);
+				this.undo = { page: e.path, label: e.title, writes, until: Date.now() + UNDO_MS, timer };
+			}
 		} finally {
 			this.busy = false;
 			this.renderActions();
@@ -1172,11 +1393,13 @@ export class ReviewView extends ItemView {
 
 	async markUnreviewed() {
 		const e = this.current();
-		const file = this.currentFile();
-		if (!e || !file || e.needsReview || !this.settings.kinds[e.kind].canMarkReviewed) return;
-		const field = statusFieldFor(e.kind, this.settings);
-		await this.app.vault.process(file, (raw) => withFrontmatterValue(raw, field, unreviewedValueFor(e.kind, this.settings)));
-		this.store.setNeedsReview(e.path, true);
+		if (!e || e.needsReview) return;
+		for (const t of this.reviewTargets(e, false)) {
+			const file = this.fileAt(t.path);
+			if (!file) continue;
+			await this.app.vault.process(file, (raw) => withFrontmatterValue(raw, t.field, t.unreviewed));
+			this.store.setNeedsReview(t.path, true);
+		}
 	}
 
 	// ---------------------------------------------------------------- input

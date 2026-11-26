@@ -1,4 +1,4 @@
-import { debounce, Plugin, setIcon, WorkspaceLeaf } from "obsidian";
+import { debounce, Notice, Plugin, setIcon, WorkspaceLeaf } from "obsidian";
 import { isPast } from "./core/queue";
 import { mergeSettings, Settings } from "./core/settings";
 import { ReviewSettingTab } from "./settingsTab";
@@ -25,6 +25,17 @@ export default class PeriodicNoteReviewPlugin extends Plugin {
 		this.addViewCommand("previous-note", "Previous note", (v) => v.step(-1));
 		this.addViewCommand("mark-reviewed", "Mark current note reviewed", (v) => void v.markReviewed());
 		this.addViewCommand("open-in-editor", "Open current note in editor", (v) => v.openInEditor(true));
+		this.addCommand({
+			id: "toggle-extra-layout",
+			name: "Show extra notes below the daily note or as their own pages",
+			callback: async () => {
+				this.settings.extraLayout = this.settings.extraLayout === "below" ? "pages" : "below";
+				await this.saveSettings(false);
+				new Notice(this.settings.extraLayout === "below"
+					? "Extra notes now show below their daily note."
+					: "Extra notes now show as their own pages.");
+			},
+		});
 
 		this.statusEl = this.addStatusBarItem();
 		this.statusEl.addClass("pnr-status", "mod-clickable");
@@ -87,7 +98,7 @@ export default class PeriodicNoteReviewPlugin extends Plugin {
 
 	private updateStatusBar() {
 		if (!this.statusEl) return;
-		const n = [...this.store.entries.values()].filter((e) => e.needsReview && isPast(e, this.store.today)).length;
+		const n = [...this.store.pages.values()].filter((e) => e.needsReview && isPast(e, this.store.today)).length;
 		const show = this.settings.showStatusBar && this.store.ready && n > 0;
 		this.statusEl.toggle(show);
 		const style = this.settings.statusBarStyle;
@@ -100,6 +111,7 @@ export default class PeriodicNoteReviewPlugin extends Plugin {
 	/** Save settings. With `rebuild`, re-read the notes (debounced while typing). */
 	async saveSettings(rebuild = true) {
 		await this.saveData(this.settings);
+		this.store.invalidatePages();
 		if (rebuild) this.rebuildSoon();
 		else {
 			this.updateStatusBar();

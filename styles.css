@@ -1012,3 +1012,180 @@
 	font-variant-numeric: tabular-nums;
 	font-weight: normal;
 }
+
+/* ------------------------------------------------------------------ scraps (notes from extra folders) */
+
+/* A day's scraps: sheets of their own under the day's sheet, like sticky notes. */
+.pnr-scraps {
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-4-3);
+	margin-top: var(--size-4-3);
+}
+.pnr-scraps-heading {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	font-weight: var(--font-semibold);
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+}
+.pnr-view .pnr-sheet.pnr-scrap-sheet {
+	padding-top: var(--size-4-5);
+	padding-bottom: var(--size-4-4);
+}
+.pnr-view.is-narrow .pnr-sheet.pnr-scrap-sheet {
+	padding-top: var(--size-4-4);
+	padding-bottom: var(--size-4-3);
+}
+.pnr-scrap-sheet.is-reviewed {
+	opacity: 0.6;
+}
+/* A folded top corner; the page around the sheet shows through the folded-away half. */
+.pnr-sheet.is-scrap::after {
+	content: "";
+	position: absolute;
+	top: -1px;
+	right: -1px;
+	width: 22px;
+	height: 22px;
+	border-bottom-left-radius: 6px;
+	background: linear-gradient(225deg,
+		var(--background-secondary) 50%,
+		color-mix(in srgb, var(--pnr-scrap-color) 35%, var(--background-primary)) 50%);
+}
+.pnr-scrap-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: var(--size-4-1) var(--size-4-2);
+	font-size: var(--font-ui-small);
+	padding-inline-end: var(--size-4-3);
+}
+.pnr-scrap-folder {
+	font-size: var(--font-ui-smaller);
+	font-weight: var(--font-semibold);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: color-mix(in srgb, var(--pnr-scrap-color) 60%, var(--text-normal));
+}
+.pnr-view a.pnr-scrap-title {
+	color: var(--text-normal);
+	font-weight: var(--font-semibold);
+	text-decoration: none;
+}
+.pnr-view a.pnr-scrap-title:hover {
+	text-decoration: underline;
+}
+.pnr-scrap-body > :first-child {
+	margin-top: var(--size-4-1);
+}
+.pnr-scrap-body > :last-child {
+	margin-bottom: var(--size-4-2);
+}
+
+/* A scrap on a page of its own. */
+.pnr-sheet.is-scrap {
+	--pnr-scrap-color: var(--color-yellow);
+	background: color-mix(in srgb, var(--pnr-scrap-color) 7%, var(--background-primary));
+	border-color: color-mix(in srgb, var(--pnr-scrap-color) 35%, var(--background-modifier-border));
+}
+.pnr-headline.pnr-scrap-headline {
+	font-size: var(--h2-size);
+}
+.pnr-meta-scraps {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+.pnr-meta-scraps svg,
+.pnr-row-scraps svg,
+.pnr-row-scrap-icon svg {
+	width: 13px;
+	height: 13px;
+}
+
+/* Queue: a day's scraps beside its ticks, or a scrap's own row under its day. */
+.pnr-row-scraps {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	margin-inline-end: 3px;
+	font-size: var(--font-ui-smaller);
+	color: color-mix(in srgb, var(--color-yellow) 75%, var(--text-muted));
+}
+/* The day above a scrap whose day has no daily note (scraps as their own pages). */
+.pnr-row-dayhead {
+	display: flex;
+	align-items: baseline;
+	gap: 5px;
+	padding: 5px var(--size-4-2) 0 calc(var(--size-4-2) + 3px);
+}
+.pnr-row-dayhead .pnr-row-day {
+	color: var(--text-muted);
+	font-style: italic;
+}
+.pnr-row.is-scraps-only .pnr-row-day {
+	color: var(--text-muted);
+	font-style: italic;
+}
+.pnr-row.is-scrap {
+	grid-template-columns: minmax(0, max-content) minmax(var(--size-4-3), 1fr) auto auto;
+	padding-block: 2px;
+	padding-inline-start: calc(var(--size-4-2) + 14px);
+	font-size: var(--font-ui-small);
+}
+.pnr-row.is-scrap .pnr-row-date {
+	align-items: center;
+}
+.pnr-row-scrap-icon {
+	display: inline-flex;
+	flex: none;
+	color: color-mix(in srgb, var(--pnr-scrap-color, var(--color-yellow)) 75%, var(--text-muted));
+}
+.pnr-row-scrap-title {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--text-muted);
+}
+.pnr-row.is-scrap.is-current .pnr-row-scrap-title {
+	color: var(--text-normal);
+}
+
+/* Settings: pattern examples and the folder preview. */
+.pnr-settings .pnr-pattern-hints {
+	padding: 0 var(--size-4-3) var(--size-4-2) var(--size-4-6);
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}
+.pnr-settings .pnr-pattern-hints summary {
+	cursor: pointer;
+}
+.pnr-hint-list {
+	display: grid;
+	grid-template-columns: max-content 1fr;
+	gap: var(--size-4-1) var(--size-4-3);
+	align-items: center;
+	margin: var(--size-4-2) 0;
+}
+.pnr-hint-row {
+	display: contents;
+}
+.pnr-settings button.pnr-hint-code {
+	justify-self: start;
+	height: auto;
+	padding: 1px var(--size-4-2);
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	box-shadow: none;
+}
+.pnr-hint-foot {
+	color: var(--text-faint);
+}
+.pnr-settings .pnr-extra-preview code {
+	font-size: var(--font-ui-smaller);
+}
+.pnr-preview-misses {
+	margin-top: var(--size-4-1);
+	color: var(--text-faint);
+}

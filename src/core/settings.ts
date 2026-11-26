@@ -52,6 +52,42 @@ export interface OtherType {
 	hidden: boolean;
 }
 
+/** Where a day's extra notes go on the review page. */
+export type ExtraLayout = "below" | "pages";
+
+/**
+ * A folder of extra notes ("scraps") with a date in their file name. Each one is shown
+ * with the daily note for its date, and has its own review state.
+ */
+export interface ExtraFolder {
+	id: string;
+	/** Vault path of the folder; empty means the whole vault. */
+	folder: string;
+	/** Shown on the page and in the queue. Empty = the folder's own name. */
+	label: string;
+	/** CSS colour of the scrap's card. Empty = a theme yellow. */
+	color: string;
+	enabled: boolean;
+	subfolders: boolean;
+	/** moment.js format of the date in the file name. */
+	dateFormat: string;
+	/**
+	 * The whole file name, as a regular expression in which `{date}` stands for the date.
+	 * Without `{date}`, it is what may follow the date (the name starts with the date).
+	 */
+	pattern: string;
+	/** Frontmatter field holding the review state. Empty = the daily notes' field. */
+	statusField: string;
+	missingStatus: MissingStatus;
+	/** Type for items under no matching heading. Empty = Other. */
+	defaultType: string;
+}
+
+export const DEFAULT_EXTRA_FOLDER: Omit<ExtraFolder, "id"> = {
+	folder: "", label: "", color: "", enabled: true, subfolders: true, dateFormat: "YYYY-MM-DD",
+	pattern: "{date}.*", statusField: "", missingStatus: "unreviewed", defaultType: "",
+};
+
 export interface Settings {
 	folder: string;
 	membershipTag: string;
@@ -80,6 +116,8 @@ export interface Settings {
 	/** Whether notes for periods that haven't started are listed when the review opens. */
 	showFuture: boolean;
 	sort: SortMode;
+	extraFolders: ExtraFolder[];
+	extraLayout: ExtraLayout;
 }
 
 export const OTHER_ID = "other";
@@ -137,6 +175,8 @@ export const DEFAULT_SETTINGS: Settings = {
 	showReviewed: false,
 	showFuture: false,
 	sort: "oldest",
+	extraFolders: [],
+	extraLayout: "below",
 };
 
 /** Deep-ish merge of saved data over the defaults, so new settings get their default. */
@@ -152,6 +192,9 @@ export function mergeSettings(saved: Partial<Settings> | null | undefined): Sett
 			id: t.id, label: t.label ?? t.id, color: t.color ?? "", headings: t.headings ?? [],
 			match: t.match ?? "contains", enabled: t.enabled ?? true, domainLabels: t.domainLabels ?? {},
 		}));
+	}
+	if (Array.isArray(saved.extraFolders)) {
+		out.extraFolders = saved.extraFolders.map((f, i) => ({ ...DEFAULT_EXTRA_FOLDER, ...f, id: f.id || `extra-${i}` }));
 	}
 	return out;
 }

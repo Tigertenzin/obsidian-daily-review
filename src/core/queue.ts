@@ -2,6 +2,7 @@ import { moment } from "obsidian";
 import { daysAgo, kindWeight, parseTitle, Period, periodFor } from "./periods";
 import { Kind, OTHER_ID, Settings, SortMode } from "./settings";
 import { TypeCount } from "./parse";
+import type { ExtraEntry } from "./extras";
 
 export interface NoteEntry extends Period {
 	path: string;
@@ -11,9 +12,22 @@ export interface NoteEntry extends Period {
 	open: number;
 	tasks: number;
 	settled: number;
+	/** Order among pages with the same date and kind (a day's scraps come after its note). */
+	sub?: number;
 }
 
-export type FilterId = "all" | "weekdays" | "weekends" | Exclude<Kind, "daily"> | "old";
+/**
+ * One page of the review: a periodic note, a day's note with its scraps, a day that only
+ * has scraps, or (when scraps get their own pages) one scrap. `path` is the page's key:
+ * the note's path, the scrap's path, or `pnr-day:<date>` for a day with no daily note.
+ * Counts and review state cover the notes on the page that still need review.
+ */
+export interface QueueEntry extends NoteEntry {
+	note: NoteEntry | null;
+	scraps: ExtraEntry[];
+}
+
+export type FilterId = "all" | "weekdays" | "weekends" | Exclude<Kind, "daily"> | "old" | "scraps";
 
 /** Kind chips shown in the top bar (the other filter ids remain available to code). */
 export const FILTERS: { id: FilterId; label: string }[] = [
@@ -22,6 +36,7 @@ export const FILTERS: { id: FilterId; label: string }[] = [
 	{ id: "monthly", label: "Monthly" },
 	{ id: "quarterly", label: "Quarterly" },
 	{ id: "yearly", label: "Yearly" },
+	{ id: "scraps", label: "Scraps" },
 ];
 
 /** A type pill's state: show only notes with this type open, or hide notes with only it left. */
@@ -60,8 +75,10 @@ export function isFuture(e: NoteEntry, today: string): boolean {
 	return e.start > today;
 }
 
-export function matchesFilter(e: NoteEntry, f: FilterId, today: string): boolean {
+export function matchesFilter(e: NoteEntry & { scraps?: ExtraEntry[] }, f: FilterId, today: string): boolean {
 	switch (f) {
+		case "scraps":
+			return (e.scraps?.length ?? 0) > 0;
 		case "all":
 			return true;
 		case "weekdays":
@@ -79,10 +96,12 @@ export function compareByDate(a: NoteEntry, b: NoteEntry): number {
 	if (a.anchor !== b.anchor) return a.anchor < b.anchor ? -1 : 1;
 	const k = kindWeight(a.kind) - kindWeight(b.kind);
 	if (k !== 0) return k;
+	const sub = (a.sub ?? 0) - (b.sub ?? 0);
+	if (sub !== 0) return sub;
 	return a.title.localeCompare(b.title, undefined, { numeric: true });
 }
 
-export function sortEntries(entries: NoteEntry[], sort: SortMode): NoteEntry[] {
+export function sortEntries<T extends NoteEntry>(entries: T[], sort: SortMode): T[] {
 	const out = [...entries];
 	switch (sort) {
 		case "oldest":

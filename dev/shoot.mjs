@@ -91,6 +91,43 @@ const states = [
 		await p.evaluate(() => { document.querySelector(".pnr-main").scrollTop = 150; });
 		await p.waitForTimeout(200);
 	} },
+	// Scraps below yesterday's daily note.
+	{ name: "scraps-below", run: async (p) => {
+		await p.evaluate(() => {
+			const { view, store, dayName } = window.pnr;
+			view.goTo(store.pageKeyFor("pnr-day:" + dayName(1)));
+		});
+		await p.waitForTimeout(400);
+		await p.evaluate(() => {
+			const main = document.querySelector(".pnr-main");
+			const pile = document.querySelector(".pnr-scraps");
+			main.scrollTop = pile.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop - 80;
+		});
+		await p.waitForTimeout(200);
+	} },
+	// A day with scraps and no daily note.
+	{ name: "scraps-alone", run: async (p) => {
+		await p.evaluate(() => window.pnr.view.goTo("pnr-day:" + window.pnr.dayName(6)));
+		await p.waitForTimeout(400);
+	} },
+	// The queue with scraps below their notes.
+	{ name: "scraps-queue", only: (s) => s.width < 900, run: async (p) => {
+		await p.click(".pnr-queue-toggle");
+		await p.waitForTimeout(300);
+	} },
+	// Scraps as their own pages: one scrap, and the queue.
+	{ name: "scraps-pages", layout: "pages", run: async (p) => {
+		await p.evaluate(() => {
+			const { view, store, dayName } = window.pnr;
+			const first = [...store.pages.values()].find((e) => e.note === null && e.start === dayName(1));
+			view.goTo(first.path);
+		});
+		await p.waitForTimeout(400);
+	} },
+	{ name: "scraps-pages-queue", layout: "pages", only: (s) => s.width < 900, run: async (p) => {
+		await p.click(".pnr-queue-toggle");
+		await p.waitForTimeout(300);
+	} },
 ];
 
 const filter = process.argv[2] ?? "";
@@ -105,7 +142,8 @@ for (const size of sizes) {
 		const page = await browser.newPage({ viewport: { width: size.width, height: size.height }, deviceScaleFactor: size.scale });
 		page.on("pageerror", (e) => errors.push(`${name}: ${e.message}`));
 		page.on("console", (m) => m.type() === "error" && !m.text().startsWith("Failed to load resource") && errors.push(`${name}: ${m.text()}`));
-		await page.goto(`${base}?device=${size.device}${themeQuery}`);
+		const layout = state.layout ? `&layout=${state.layout}` : "";
+		await page.goto(`${base}?device=${size.device}${themeQuery}${layout}`);
 		await page.waitForFunction(() => window.pnrReady === true, null, { timeout: 10000 });
 		await page.waitForTimeout(300);
 		await state.run(page);

@@ -24,6 +24,11 @@ marks the note reviewed once you've dealt with them.
   one line, and moves on to the next note. Press it twice (or Enter twice) to confirm:
   the first press starts a short countdown on the button. An Undo button appears for a
   few seconds afterwards.
+- **Scraps from other folders.** Notes elsewhere with a date in their file name (quick
+  notes, call notes, clippings) can be pulled in from "extra folders". Each shows up as a
+  scrap with the daily note for its date: either on cards below the daily note, or as
+  pages of their own right after it. A day with scraps but no daily note still gets a
+  page. Scraps have their own review state, and their open items count toward the day.
 - **Check items off in place.** Click a checkbox on the page to check or uncheck it in
   the note.
 - **Keyboard and touch.** `←`/`→` move through the queue on desktop, `u` undoes the last Mark reviewed; swipe left and right
@@ -60,6 +65,14 @@ has `reviewed: true`. Every part of that can be changed:
 - **Item types:** an ordered list. Each type has a label, a colour and heading patterns.
   A live preview shows which headings in your notes each type matches, and which
   headings count as Other.
+- **Extra folders:** any number of folders of dated notes. Each has a folder (with search),
+  a label and colour, a date format, and a file name pattern: a regular expression where
+  `{date}` stands for the date, so `{date}.*` ignores anything after it and `.* {date}`
+  finds a date at the end. A live preview shows which notes match and how each date is
+  read. Scraps use the daily notes' review field unless a folder names its own true/false
+  property, and a folder can give items under no matching heading an item type. Whether
+  scraps sit below the daily note or get their own pages is a setting, and the command
+  **Show extra notes below the daily note or as their own pages** switches it.
 - **The page:** how open items are highlighted (tint, bar, checkbox or nothing), which
   code block languages to hide (queries like `tasks` and `dataview`), and whether
   checkboxes can be ticked from the page. Items carrying the task tag are toggled through

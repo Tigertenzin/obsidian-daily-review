@@ -143,9 +143,10 @@ export function domainLabel(domain: string, labels: Record<string, string>): str
 
 /**
  * Read a note: its headings, checkbox items (with state, type and task flag), counts,
- * and the markdown to render with hidden parts blanked out.
+ * and the markdown to render with hidden parts blanked out. `fallbackType` is the type of
+ * items under no heading, or under a section heading no type matches (default Other).
  */
-export function analyzeNote(raw: string, title: string, settings: Settings): NoteAnalysis {
+export function analyzeNote(raw: string, title: string, settings: Settings, fallbackType = OTHER_ID): NoteAnalysis {
 	const lines = raw.split(/\r?\n/);
 	const hidden = new Array<boolean>(lines.length).fill(false);
 	const inCode = new Array<boolean>(lines.length).fill(false);
@@ -254,12 +255,16 @@ export function analyzeNote(raw: string, title: string, settings: Settings): Not
 	// Items, with the type of the section they sit in
 	const items: Item[] = [];
 	const headingAt = new Map(headings.map((h) => [h.line, h]));
-	let section = OTHER_ID;
+	const fallback = fallbackType === OTHER_ID || settings.itemTypes.some((t) => t.id === fallbackType && t.enabled)
+		? fallbackType : OTHER_ID;
+	let section = fallback;
 	for (let j = i; j < lines.length; j++) {
 		const h = headingAt.get(j);
 		if (h) {
-			if (h.level === settings.sectionLevel) section = typeForHeading(h.text, settings);
-			else if (h.level < settings.sectionLevel) section = OTHER_ID;
+			if (h.level === settings.sectionLevel) {
+				const t = typeForHeading(h.text, settings);
+				section = t === OTHER_ID ? fallback : t;
+			} else if (h.level < settings.sectionLevel) section = fallback;
 			continue;
 		}
 		if (inCode[j]) continue;

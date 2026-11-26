@@ -5,12 +5,12 @@ export function statusFieldFor(kind: Kind, settings: Settings): string {
 	return settings.kinds[kind].statusField.trim() || settings.statusField;
 }
 
-function isMissing(v: unknown): boolean {
+export function isMissing(v: unknown): boolean {
 	return v === undefined || v === null || (typeof v === "string" && v.trim() === "")
 		|| (Array.isArray(v) && v.length === 0);
 }
 
-function valueMatches(v: unknown, want: string): boolean {
+export function valueMatches(v: unknown, want: string): boolean {
 	const w = want.trim().toLowerCase();
 	if (Array.isArray(v)) return v.some((x) => valueMatches(x, want));
 	if (typeof v === "boolean") return String(v) === w;

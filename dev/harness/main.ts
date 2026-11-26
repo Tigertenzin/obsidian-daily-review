@@ -85,6 +85,17 @@ notes[`Journal/${lastMonth.format("YYYY-MM MMM")}.md`] =
 const lastYear = today.clone().subtract(1, "year");
 notes[`Journal/Year ${lastYear.format("YYYY")}.md`] = `---\ntags: [journal, yearly]\n---\n## Highlights\n- [ ] Write the year review\n`;
 
+// Scraps: notes in extra folders with a date in their name.
+const dayName = (n: number) => today.clone().subtract(n, "days").format(D);
+notes[`Inbox/${dayName(1)} call with the plumber.md`] =
+	"Said they can come **Thursday morning**. Bring the old part.\n\n- [ ] Text back to confirm the time\n- [ ] Clear under the sink\n";
+notes[`Inbox/${dayName(1)} grocery list.md`] = "- [ ] Oat milk\n- [x] Coffee\n- [ ] Lemons\n";
+notes[`Inbox/${dayName(6)} idea dump.md`] =
+	"A day with no daily note, only this.\n\n- [ ] Look into a better backup setup\n- [ ] Write up the trip idea\n";
+notes[`Inbox/${dayName(2)} already seen.md`] = "---\nreviewed: true\n---\n- [ ] Not counted: reviewed\n";
+notes["Inbox/Ideas.md"] = "No date in this name, so it isn't a scrap.\n";
+notes[`Calls/Call ${dayName(3)} with Sam.md`] = "## Follow up\n- [ ] Send Sam the slides #task\n- [ ] Ask about the venue\n";
+
 // ------------------------------------------------------------------ mock app
 
 function cacheFor(text: string) {
@@ -130,12 +141,21 @@ settings.itemTypes = [
 		domainLabels: { "example.com": "Video" } },
 ];
 
+settings.extraFolders = [
+	{ id: "inbox", folder: "Inbox", label: "", color: "", enabled: true, subfolders: true, dateFormat: "YYYY-MM-DD",
+		pattern: "{date}.*", statusField: "", missingStatus: "unreviewed", defaultType: "" },
+	{ id: "calls", folder: "Calls", label: "Call notes", color: "#4f8fe8", enabled: true, subfolders: true,
+		dateFormat: "YYYY-MM-DD", pattern: "Call {date}.*", statusField: "", missingStatus: "unreviewed", defaultType: "work" },
+];
+if (params.get("layout") === "pages") settings.extraLayout = "pages";
+
 const store = new NoteStore(app, () => settings);
 metadataEvents.on("changed", (f: TFile, data: string) => void store.update(f, data));
 const plugin: any = {
 	settings,
 	store,
 	saveSettings: async (rebuild = true) => {
+		store.invalidatePages();
 		if (rebuild) await store.rebuild();
 		else store.trigger("changed", null);
 	},
@@ -155,7 +175,7 @@ if (device === "phone") {
 }
 
 const view = new ReviewView({ app, containerEl: leafContent }, plugin);
-(window as any).pnr = { view, store, settings, notes, setIcon };
+(window as any).pnr = { view, store, settings, notes, setIcon, dayName };
 document.addEventListener("keydown", (e) => view.scope?.handle(e as KeyboardEvent));
 
 await store.rebuild();
