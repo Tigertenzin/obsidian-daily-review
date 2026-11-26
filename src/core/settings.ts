@@ -118,6 +118,13 @@ export interface Settings {
 	sort: SortMode;
 	extraFolders: ExtraFolder[];
 	extraLayout: ExtraLayout;
+	/**
+	 * Below the daily note: "separate" gives each scrap its own Mark reviewed button and
+	 * the page's button marks the daily note; "together" marks the note and scraps at once.
+	 */
+	scrapReview: "separate" | "together";
+	/** Leave a reviewed daily note off the page while its day still has scraps to review. */
+	hideReviewedNote: boolean;
 }
 
 export const OTHER_ID = "other";
@@ -177,6 +184,8 @@ export const DEFAULT_SETTINGS: Settings = {
 	sort: "oldest",
 	extraFolders: [],
 	extraLayout: "below",
+	scrapReview: "separate",
+	hideReviewedNote: true,
 };
 
 /** Deep-ish merge of saved data over the defaults, so new settings get their default. */

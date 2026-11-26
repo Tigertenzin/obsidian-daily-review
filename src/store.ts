@@ -2,8 +2,8 @@ import { App, Events, getAllTags, TAbstractFile, TFile } from "obsidian";
 import { analyzeNote } from "./core/parse";
 import { classifyNote, hasTag, kindFromTags, todayString } from "./core/periods";
 import {
-	buildPages, compilePattern, DAY_PREFIX, ExtraEntry, extraNeedsReview, inExtraFolder, matchExtraFile, matchExtraName,
-	normFolder,
+	buildPages, compilePattern, DAY_PREFIX, ExtraEntry, extraNeedsReview, inExtraFolder, matchExtraFile, matchExtraSpan,
+	nameWithoutDate, normFolder,
 } from "./core/extras";
 import { NoteEntry, QueueEntry } from "./core/queue";
 import { needsReview } from "./core/review";
@@ -16,7 +16,7 @@ export interface ExtraFolderStats {
 	matched: number;
 	toReview: number;
 	/** A few matched names with the day each was read as, newest first. */
-	examples: { name: string; date: string }[];
+	examples: { name: string; date: string; time: string | null; shown: string }[];
 	/** A few names in the folder that didn't fit. */
 	misses: string[];
 	/** Set when the pattern isn't a valid regular expression. */
@@ -176,7 +176,9 @@ export class NoteStore extends Events {
 				path: file.path,
 				title: file.basename,
 				folderId: extra.folder.id,
-				date: extra.date,
+				date: extra.match.date,
+				time: extra.match.time,
+				name: nameWithoutDate(file.basename, extra.match.at, extra.match.length),
 				needsReview: extraNeedsReview(extra.folder, cache.frontmatter, settings),
 				counts: a.counts,
 				open: a.open,
@@ -242,21 +244,22 @@ export class NoteStore extends Events {
 		const stats: ExtraFolderStats = { files: 0, matched: 0, toReview: 0, examples: [], misses: [] };
 		const c = compilePattern(f.pattern);
 		if (c.error !== undefined) stats.error = c.error;
-		const found: { name: string; date: string }[] = [];
+		const found: ExtraFolderStats["examples"] = [];
 		for (const file of this.app.vault.getMarkdownFiles()) {
 			if (!inExtraFolder(file.path, f)) continue;
 			stats.files++;
-			const date = c.error === undefined ? matchExtraName(file.basename, f.dateFormat, c) : null;
-			if (!date) {
+			const m = c.error === undefined ? matchExtraSpan(file.basename, f.dateFormat, c) : null;
+			if (!m) {
 				if (stats.misses.length < 3) stats.misses.push(file.basename);
 				continue;
 			}
 			stats.matched++;
-			found.push({ name: file.basename, date });
+			found.push({ name: file.basename, date: m.date, time: m.time, shown: nameWithoutDate(file.basename, m.at, m.length) });
 			const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
 			if (extraNeedsReview(f, fm, settings)) stats.toReview++;
 		}
-		stats.examples = found.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)).slice(0, 3);
+		const key = (x: { date: string; time: string | null }) => `${x.date} ${x.time ?? ""}`;
+		stats.examples = found.sort((a, b) => (key(a) < key(b) ? 1 : key(a) > key(b) ? -1 : 0)).slice(0, 3);
 		return stats;
 	}
 

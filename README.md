@@ -29,6 +29,9 @@ marks the note reviewed once you've dealt with them.
   scrap with the daily note for its date: either on cards below the daily note, or as
   pages of their own right after it. A day with scraps but no daily note still gets a
   page. Scraps have their own review state, and their open items count toward the day.
+  Below the daily note, each scrap has its own Mark reviewed button by default (the page's
+  button marks the daily note), and a reviewed daily note steps aside while its day still
+  has scraps to review. Both are settings.
 - **Check items off in place.** Click a checkbox on the page to check or uncheck it in
   the note.
 - **Keyboard and touch.** `←`/`→` move through the queue on desktop, `u` undoes the last Mark reviewed; swipe left and right
@@ -37,7 +40,8 @@ marks the note reviewed once you've dealt with them.
 
 Start it from the command palette with **Periodic Note Review: Open daily review**.
 
-Folders, tags, frontmatter fields, title formats and item types are all settings, so the
+Folders, tags, frontmatter fields, title formats and item types are all settings (in
+tabs: Notes, Extra folders, Item types, Checkboxes, Review page), so the
 plugin should fit any vault that keeps periodic notes with a review flag.
 
 ## Installing with BRAT
@@ -68,7 +72,8 @@ has `reviewed: true`. Every part of that can be changed:
 - **Extra folders:** any number of folders of dated notes. Each has a folder (with search),
   a label and colour, a date format, and a file name pattern: a regular expression where
   `{date}` stands for the date, so `{date}.*` ignores anything after it and `.* {date}`
-  finds a date at the end. A live preview shows which notes match and how each date is
+  finds a date at the end. The date format can include a time (`YYYY-MM-DD HHmm`), shown
+  on the scrap and left out of its name, and can list alternatives separated by `|`. A live preview shows which notes match and how each date is
   read. Scraps use the daily notes' review field unless a folder names its own true/false
   property, and a folder can give items under no matching heading an item type. Whether
   scraps sit below the daily note or get their own pages is a setting, and the command

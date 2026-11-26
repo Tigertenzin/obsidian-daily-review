@@ -1,5 +1,5 @@
 import { AbstractInputSuggest, App, moment, PluginSettingTab, setIcon, Setting, TFolder } from "obsidian";
-import { compilePattern, extraLabel, matchExtraName } from "./core/extras";
+import { compilePattern, dateFormats, extraLabel, matchExtraName } from "./core/extras";
 import { describeFormat } from "./core/queue";
 import { typeForHeading } from "./core/parse";
 import { statusFieldFor } from "./core/review";
@@ -74,7 +74,18 @@ const PATTERN_HINTS: [string, string][] = [
 	["{date}(?! draft).*", "Anything after the date, except \" draft\"."],
 ];
 
+type SettingsTabId = "notes" | "extra" | "types" | "checkboxes" | "page";
+const SETTINGS_TABS: { id: SettingsTabId; label: string }[] = [
+	{ id: "notes", label: "Notes" },
+	{ id: "extra", label: "Extra folders" },
+	{ id: "types", label: "Item types" },
+	{ id: "checkboxes", label: "Checkboxes" },
+	{ id: "page", label: "Review page" },
+];
+
 export class ReviewSettingTab extends PluginSettingTab {
+	/** The settings tab shown; kept while the settings window stays open. */
+	private tab: SettingsTabId = "notes";
 	private sharedFieldHints: { kind: Kind; el: HTMLElement; input?: HTMLInputElement }[] = [];
 	private formatPreviews: { kind: Kind; el: HTMLElement }[] = [];
 	private lastCounts: ReturnType<NoteStore["countByKind"]> | null = null;
@@ -105,7 +116,27 @@ export class ReviewSettingTab extends PluginSettingTab {
 			text: `Periodic Note Review ${this.plugin.manifest.version} is running. After an update, restart Obsidian (or turn the plugin off and on) if this doesn't show the new version.`,
 		});
 
-		// ------------------------------------------------------------ general
+		const tabs = el.createDiv({ cls: "pnr-settings-tabs", attr: { role: "tablist" } });
+		for (const t of SETTINGS_TABS) {
+			const b = tabs.createEl("button", { cls: "pnr-settings-tab", text: t.label, attr: { role: "tab" } });
+			b.toggleClass("is-active", t.id === this.tab);
+			b.setAttr("aria-selected", t.id === this.tab ? "true" : "false");
+			b.addEventListener("click", () => {
+				this.tab = t.id;
+				this.display();
+			});
+		}
+		const page = el.createDiv({ cls: "pnr-settings-page" });
+		switch (this.tab) {
+			case "notes": this.renderNotesTab(page); break;
+			case "extra": this.renderExtraTab(page); break;
+			case "types": this.renderTypesTab(page); break;
+			case "checkboxes": this.renderCheckboxesTab(page); break;
+			case "page": this.renderPageTab(page); break;
+		}
+	}
+
+	private renderNotesTab(el: HTMLElement) {
 		new Setting(el).setName("General").setHeading();
 		new Setting(el)
 			.setName("Notes folder")
@@ -154,11 +185,13 @@ export class ReviewSettingTab extends PluginSettingTab {
 		// ------------------------------------------------------------ one section per kind
 		for (const k of KINDS) this.renderKind(el, k);
 		this.refreshPreviews();
+	}
 
-		// ------------------------------------------------------------ extra folders
+	private renderExtraTab(el: HTMLElement) {
 		this.renderExtraFolders(el);
+	}
 
-		// ------------------------------------------------------------ item types
+	private renderTypesTab(el: HTMLElement) {
 		new Setting(el).setName("Item types").setHeading();
 		el.createEl("p", {
 			cls: "setting-item-description",
@@ -188,8 +221,9 @@ export class ReviewSettingTab extends PluginSettingTab {
 			this.display();
 		}));
 		this.renderUnmatched(el);
+	}
 
-		// ------------------------------------------------------------ items
+	private renderCheckboxesTab(el: HTMLElement) {
 		new Setting(el).setName("Checkboxes").setHeading();
 		new Setting(el)
 			.setName("Open marks")
@@ -222,8 +256,9 @@ export class ReviewSettingTab extends PluginSettingTab {
 				this.s.taskTag = v.trim();
 				this.save();
 			}));
+	}
 
-		// ------------------------------------------------------------ page
+	private renderPageTab(el: HTMLElement) {
 		new Setting(el).setName("The page").setHeading();
 		new Setting(el)
 			.setName("Highlight open items with")
@@ -569,14 +604,34 @@ export class ReviewSettingTab extends PluginSettingTab {
 		});
 		new Setting(el)
 			.setName("Show a day's scraps")
-			.setDesc("Below: the daily note and its scraps make one page, marked reviewed together. Own pages: each scrap is a page after its day's note, reviewed on its own. The \"Show extra notes below the daily note or as their own pages\" command switches between them.")
+			.setDesc("Below: the daily note and its scraps make one page, with each scrap on a sheet of its own under the note. Own pages: each scrap is a page after its day's note. The \"Show extra notes below the daily note or as their own pages\" command switches between them.")
 			.addDropdown((d) => d
 				.addOptions({ below: "Below the daily note", pages: "As their own pages" })
 				.setValue(this.s.extraLayout)
 				.onChange((v) => {
 					this.s.extraLayout = v as ExtraLayout;
 					this.save(false);
+					this.display();
 				}));
+		if (this.s.extraLayout === "below") {
+			new Setting(el)
+				.setName("Marking scraps reviewed")
+				.setDesc("Separately: each scrap has its own Mark reviewed button at its top right, and the page's button marks the daily note (or, once that's reviewed, the scraps left). Together: the page's button marks the daily note and all its scraps at once.")
+				.addDropdown((d) => d
+					.addOptions({ separate: "Separately, with their own buttons", together: "Together with the daily note" })
+					.setValue(this.s.scrapReview)
+					.onChange((v) => {
+						this.s.scrapReview = v as "separate" | "together";
+						this.save(false);
+					}));
+			new Setting(el)
+				.setName("Hide a reviewed daily note while its scraps aren't")
+				.setDesc("When a day's note is reviewed but some of its scraps aren't, show only the scraps. A \"Show it\" link brings the note back.")
+				.addToggle((t) => t.setValue(this.s.hideReviewedNote).onChange((v) => {
+					this.s.hideReviewedNote = v;
+					this.save(false);
+				}));
+		}
 		const list = el.createDiv({ cls: "pnr-types" });
 		this.s.extraFolders.forEach((f, i) => this.renderExtraFolder(list, f, i));
 		new Setting(el).addButton((b) => b.setButtonText("Add extra folder").onClick(() => {
@@ -669,12 +724,17 @@ export class ReviewSettingTab extends PluginSettingTab {
 			fmtHint.empty();
 			const format = f.dateFormat.trim();
 			const today = moment();
-			const sample = format ? today.format(format) : "";
 			const line = fmtHint.createDiv();
-			line.appendText("moment.js tokens, like the title formats above. Today: ");
-			line.createEl("code", { text: sample || "(empty)" });
-			const back = sample ? moment(sample, format, true) : null;
-			if (!back?.isValid() || !back.isSame(today, "day")) {
+			line.appendText("moment.js tokens, as in the title formats. A time can be part of it (HHmm reads 2008 as 20:08); it's shown on the scrap and left out of its name. Separate alternatives with |, such as ");
+			line.createEl("code", { text: "YYYY-MM-DD HHmm | YYYY-MM-DD" });
+			line.appendText(" for names with or without a time. Now: ");
+			const formats = dateFormats(format);
+			line.createEl("code", { text: formats.map((x) => today.format(x)).join(", ") || "(empty)" });
+			const bad = formats.some((x) => {
+				const back = moment(today.format(x), x, true);
+				return !back.isValid() || !back.isSame(today, "day");
+			});
+			if (formats.length === 0 || bad) {
 				fmtHint.createDiv({ cls: "pnr-format-warn", text: "This format doesn't read back as today. It needs a year, month and day, such as YYYY-MM-DD or YYYYMMDD." });
 			}
 		};
@@ -789,7 +849,7 @@ export class ReviewSettingTab extends PluginSettingTab {
 			for (const x of st.examples) {
 				const line = el.createDiv();
 				line.createEl("code", { text: x.name });
-				line.appendText(` → ${moment(x.date, "YYYY-MM-DD").format("ddd D MMM YYYY")}`);
+				line.appendText(` → ${moment(x.date, "YYYY-MM-DD").format("ddd D MMM YYYY")}${x.time ? `, ${x.time}` : ""}, shown as “${x.shown}”`);
 			}
 			if (st.misses.length > 0) {
 				const line = el.createDiv({ cls: "pnr-preview-misses" });
@@ -800,7 +860,7 @@ export class ReviewSettingTab extends PluginSettingTab {
 				});
 			}
 			// A name built from today's date, to show the pattern accepting it.
-			const sample = moment().format(f.dateFormat.trim() || "YYYY-MM-DD");
+			const sample = moment().format(dateFormats(f.dateFormat)[0] ?? "YYYY-MM-DD");
 			if (st.matched === 0 && !matchExtraName(sample, f.dateFormat, f.pattern)) {
 				el.createDiv({ cls: "pnr-format-warn", text: `A name that is just today's date ("${sample}") doesn't match either.` });
 			}

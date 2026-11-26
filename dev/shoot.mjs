@@ -124,6 +124,14 @@ const states = [
 		});
 		await p.waitForTimeout(400);
 	} },
+	// A reviewed daily note left off the page while its scrap isn't.
+	{ name: "scraps-hidden-note", run: async (p) => {
+		await p.evaluate(() => window.pnr.view.goTo(window.pnr.store.pageKeyFor("pnr-day:" + window.pnr.dayName(4))));
+		await p.waitForTimeout(400);
+	} },
+	// Settings tabs (the review page isn't shown).
+	{ name: "settings-extra", query: "&settings=extra", only: (s) => s.device !== "tablet", run: async (p) => { await p.waitForTimeout(500); } },
+	{ name: "settings-notes", query: "&settings=notes", only: (s) => s.device === "desktop", run: async (p) => { await p.waitForTimeout(500); } },
 	{ name: "scraps-pages-queue", layout: "pages", only: (s) => s.width < 900, run: async (p) => {
 		await p.click(".pnr-queue-toggle");
 		await p.waitForTimeout(300);
@@ -143,10 +151,16 @@ for (const size of sizes) {
 		page.on("pageerror", (e) => errors.push(`${name}: ${e.message}`));
 		page.on("console", (m) => m.type() === "error" && !m.text().startsWith("Failed to load resource") && errors.push(`${name}: ${m.text()}`));
 		const layout = state.layout ? `&layout=${state.layout}` : "";
-		await page.goto(`${base}?device=${size.device}${themeQuery}${layout}`);
+		await page.goto(`${base}?device=${size.device}${themeQuery}${layout}${state.query ?? ""}`);
 		await page.waitForFunction(() => window.pnrReady === true, null, { timeout: 10000 });
 		await page.waitForTimeout(300);
 		await state.run(page);
+		if (state.query) {
+			// Settings: grow the window to the page's height (WebKit doesn't repaint a scrolled page here).
+			const h = await page.evaluate(() => Math.ceil(document.querySelector(".pnr-harness-settings").getBoundingClientRect().height) + 40);
+			await page.setViewportSize({ width: size.width, height: h });
+			await page.waitForTimeout(300);
+		}
 		await page.screenshot({ path: join(shots, `${name}.png`) });
 		console.log("saved", `dev/.local/shots/${name}.png`);
 		await page.close();

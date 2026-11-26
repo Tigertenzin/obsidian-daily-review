@@ -4,7 +4,7 @@ import {
 import {
 	analyzeNote, domainLabel, firstLinkDomain, Item, NoteAnalysis, typeForHeading, withMark,
 } from "./core/parse";
-import { ExtraEntry, extraLabel, extraStatusField, scrapName } from "./core/extras";
+import { ExtraEntry, extraLabel, extraStatusField } from "./core/extras";
 import { daysAgo } from "./core/periods";
 import {
 	FILTERS, FilterId, groupLabel, isFuture, isPast, longAge, mastheadFor, matchesFilter, matchesTypeFilter,
@@ -55,6 +55,8 @@ interface ReviewWrite {
 interface ReviewTarget {
 	path: string;
 	field: string;
+	/** Open items in it, for the confirm label. */
+	open: number;
 	reviewed: string;
 	unreviewed: string;
 }
@@ -85,6 +87,8 @@ export class ReviewView extends ItemView {
 	private renderToken = 0;
 	/** The notes drawn on the current page, in order. */
 	private sections: Section[] = [];
+	/** A page whose reviewed daily note the reader asked to see anyway. */
+	private shownNote: string | null = null;
 
 	/** Whether future notes are unfolded in the queue; starts from the setting. */
 	private showFuture: boolean;
@@ -727,6 +731,7 @@ export class ReviewView extends ItemView {
 	// ---------------------------------------------------------------- navigation
 
 	goTo(path: string | null) {
+		if (path !== this.currentPath) this.shownNote = null;
 		if (this.armed && this.armed.path !== path) this.disarm(false);
 		this.currentPath = path;
 		this.mainEl.scrollTop = 0;
@@ -796,7 +801,7 @@ export class ReviewView extends ItemView {
 
 	/** A scrap's name without the date, for places that already show the day. */
 	private scrapName(x: ExtraEntry): string {
-		return scrapName(x.title, x.date, this.extraFolder(x.folderId)?.dateFormat ?? "");
+		return x.name;
 	}
 
 	private scrapColor(x: ExtraEntry): string {
@@ -809,7 +814,10 @@ export class ReviewView extends ItemView {
 		const token = ++this.renderToken;
 		const e = this.current();
 		const members: { file: TFile; scrap: ExtraEntry | null; needsReview: boolean }[] = [];
-		if (e?.note) {
+		// A reviewed daily note stays off the page while its day still has scraps to review.
+		const hideNote = !!e?.note && !e.note.needsReview && e.needsReview && e.scraps.length > 0
+			&& this.settings.extraLayout === "below" && this.settings.hideReviewedNote && this.shownNote !== e.path;
+		if (e?.note && !hideNote) {
 			const f = this.fileAt(e.note.path);
 			if (f) members.push({ file: f, scrap: null, needsReview: e.note.needsReview });
 		}
@@ -832,8 +840,9 @@ export class ReviewView extends ItemView {
 			counted: !e.needsReview || m.needsReview,
 		}));
 
+		const withNote = members[0]?.scrap === null;
 		const sheet = createDiv({ cls: "pnr-sheet" });
-		if (e.note) {
+		if (withNote) {
 			const cssclasses = this.app.metadataCache.getFileCache(sections[0].file)?.frontmatter?.cssclasses;
 			const extra = Array.isArray(cssclasses) ? cssclasses : typeof cssclasses === "string" ? cssclasses.split(/[\s,]+/) : [];
 			for (const c of extra) if (typeof c === "string" && c) sheet.addClass(c);
@@ -857,7 +866,16 @@ export class ReviewView extends ItemView {
 		/** Sheets drawn after the main one (a day's scraps). */
 		const extraSheets: HTMLElement[] = [];
 		let next = 0;
-		if (e.note) {
+		if (hideNote) {
+			const hidden = sheet.createDiv({ cls: "pnr-note-hidden" });
+			hidden.createSpan({ text: "The daily note is reviewed. Only this day's scraps are left." });
+			const show = hidden.createEl("button", { cls: "pnr-link-btn", text: "Show it" });
+			show.addEventListener("click", () => {
+				this.shownNote = e.path;
+				void this.renderNote(true);
+			});
+		}
+		if (withNote) {
 			await render(sections[next++], sheet.createDiv({ cls: "pnr-note markdown-rendered markdown-preview-view" }));
 		}
 		if (scrapPage) {
@@ -875,7 +893,8 @@ export class ReviewView extends ItemView {
 				const card = pile.createDiv({ cls: "pnr-sheet is-scrap pnr-scrap-sheet" });
 				card.style.setProperty("--pnr-scrap-color", this.scrapColor(x));
 				card.toggleClass("is-reviewed", !x.needsReview);
-				const head = card.createDiv({ cls: "pnr-scrap-head" });
+				const headRow = card.createDiv({ cls: "pnr-scrap-head" });
+				const head = headRow.createDiv({ cls: "pnr-scrap-id" });
 				const folder = this.extraFolder(x.folderId) ?? this.missingFolder();
 				head.createSpan({ cls: "pnr-scrap-folder", text: extraLabel(folder) });
 				const title = head.createEl("a", {
@@ -885,7 +904,17 @@ export class ReviewView extends ItemView {
 					evt.preventDefault();
 					this.openPath(x.path, true);
 				});
-				if (!x.needsReview && e.needsReview) head.createSpan({ cls: "pnr-reviewed-pill", text: "Reviewed" });
+				if (x.time) head.createSpan({ cls: "pnr-scrap-time", text: x.time });
+				if (this.settings.scrapReview === "separate") {
+					const btn = headRow.createEl("button", { cls: "pnr-scrap-mark" });
+					btn.toggleClass("is-reviewed", !x.needsReview);
+					setIcon(btn.createSpan(), x.needsReview ? "check" : "check-check");
+					btn.createSpan({ text: x.needsReview ? "Mark reviewed" : "Reviewed" });
+					btn.setAttr("aria-label", x.needsReview ? `Mark "${x.name}" reviewed` : `Reviewed. Click to mark "${x.name}" unreviewed`);
+					btn.addEventListener("click", () => void this.markScrap(x));
+				} else if (!x.needsReview && e.needsReview) {
+					head.createSpan({ cls: "pnr-reviewed-pill", text: "Reviewed" });
+				}
 				await render(sec, card.createDiv({ cls: "pnr-note pnr-scrap-body markdown-rendered markdown-preview-view" }));
 				if (token !== this.renderToken) break;
 			}
@@ -1027,8 +1056,11 @@ export class ReviewView extends ItemView {
 			face("rotate-ccw", "Mark unreviewed", true);
 		} else {
 			const narrow = this.contentEl.hasClass("is-narrow");
-			const confirm = e.open > 0 ? (narrow ? `Confirm (${e.open} open)` : `Confirm · ${e.open} still open`) : (narrow ? "Confirm" : "Confirm reviewed");
-			face("check", "Mark reviewed", !armed);
+			const targets = this.reviewTargets(e, true);
+			const open = targets.reduce((n, t) => n + t.open, 0);
+			const scrapsOnly = !!e.note && targets.length > 0 && targets.every((t) => t.path !== e.note!.path);
+			const confirm = open > 0 ? (narrow ? `Confirm (${open} open)` : `Confirm · ${open} still open`) : (narrow ? "Confirm" : "Confirm reviewed");
+			face("check", scrapsOnly ? (narrow ? "Mark scraps" : "Mark scraps reviewed") : "Mark reviewed", !armed);
 			face("check-check", confirm, !!armed);
 			if (armed) {
 				mark.addClass("is-armed");
@@ -1313,27 +1345,77 @@ export class ReviewView extends ItemView {
 	// ---------------------------------------------------------------- review actions
 
 	/**
-	 * The notes on a page whose review state the button changes. Marking reviewed: every
-	 * note on it still to review that may be marked from here. Marking unreviewed: the
-	 * periodic note, or the scraps when the page has no periodic note.
+	 * The notes on a page whose review state the bottom button changes. Marking reviewed:
+	 * every note on it still to review that may be marked from here; but when scraps have
+	 * their own buttons, only the daily note while it's still to review. Marking
+	 * unreviewed: the periodic note, or the scraps when the page has no periodic note.
 	 */
 	private reviewTargets(e: QueueEntry, reviewing: boolean): ReviewTarget[] {
-		const out: ReviewTarget[] = [];
 		const n = e.note;
-		if (n && this.settings.kinds[n.kind].canMarkReviewed && (reviewing ? n.needsReview : !n.needsReview)) {
-			out.push({
-				path: n.path, field: statusFieldFor(n.kind, this.settings),
+		const noteTarget: ReviewTarget[] = n && this.settings.kinds[n.kind].canMarkReviewed
+			&& (reviewing ? n.needsReview : !n.needsReview)
+			? [{
+				path: n.path, field: statusFieldFor(n.kind, this.settings), open: n.open,
 				reviewed: reviewedValueFor(n.kind, this.settings), unreviewed: unreviewedValueFor(n.kind, this.settings),
-			});
-		}
-		if (!reviewing && n) return out;
+			}]
+			: [];
+		if (!reviewing && n) return noteTarget;
+		const scrapTargets: ReviewTarget[] = [];
 		for (const x of e.scraps) {
 			if (reviewing ? !x.needsReview : x.needsReview) continue;
 			const f = this.extraFolder(x.folderId);
 			if (!f) continue;
-			out.push({ path: x.path, field: extraStatusField(f, this.settings), reviewed: "true", unreviewed: this.settings.unreviewedValue });
+			scrapTargets.push({
+				path: x.path, field: extraStatusField(f, this.settings), open: x.open,
+				reviewed: "true", unreviewed: this.settings.unreviewedValue,
+			});
 		}
-		return out;
+		if (this.separateScraps(e) && noteTarget.length > 0) return noteTarget;
+		return [...noteTarget, ...scrapTargets];
+	}
+
+	/** Whether this page's scraps have their own Mark reviewed buttons. */
+	private separateScraps(e: QueueEntry): boolean {
+		return this.settings.scrapReview === "separate" && this.settings.extraLayout === "below" && !!e.note && e.scraps.length > 0;
+	}
+
+	/** A scrap's own button (scraps reviewed separately): mark it reviewed, or back. */
+	private async markScrap(x: ExtraEntry) {
+		const e = this.current();
+		const f = this.extraFolder(x.folderId);
+		const file = this.fileAt(x.path);
+		if (!e || !f || !file || this.busy) return;
+		const field = extraStatusField(f, this.settings);
+		const reviewing = x.needsReview;
+		this.disarm(false);
+		this.busy = true;
+		try {
+			const index = this.visible().findIndex((v) => v.path === e.path);
+			let before = "";
+			let after = "";
+			await this.app.vault.process(file, (raw) => {
+				before = raw;
+				after = withFrontmatterValue(raw, field, reviewing ? "true" : this.settings.unreviewedValue);
+				return after;
+			});
+			if (reviewing) {
+				this.clearUndo(false);
+				const timer = window.setTimeout(() => this.clearUndo(), UNDO_MS);
+				this.undo = {
+					page: e.path, label: x.name, until: Date.now() + UNDO_MS, timer,
+					writes: [{ path: x.path, field, back: this.settings.unreviewedValue, before, after }],
+				};
+			}
+			this.store.setNeedsReview(x.path, !reviewing);
+			// The last thing on the page to review: move on, as the bottom button would.
+			if (!this.store.pages.get(e.path)?.needsReview && !this.settings.showReviewed) this.goToNextAfter(e, Math.max(0, index));
+		} catch (err) {
+			console.error("Periodic Note Review: couldn't change the scrap's review state", err);
+			new Notice("Couldn't change that note. See the console for details.");
+		} finally {
+			this.busy = false;
+			this.renderActions();
+		}
 	}
 
 	/** First call arms the button; a second call within CONFIRM_MS marks the page reviewed. */
@@ -1373,7 +1455,9 @@ export class ReviewView extends ItemView {
 			const label = this.isScrapPage(e) ? this.scrapName(e.scraps[0]) : mastheadFor(e, this.settings).headline;
 			this.undo = { page: e.path, label, writes, until: Date.now() + UNDO_MS, timer };
 			for (const w of writes) this.store.setNeedsReview(w.path, false);
-			if (this.settings.showReviewed) this.goToNextAfter(e, index + 1);
+			// Scraps still to review on this page: stay, with the reviewed note out of the way.
+			if (this.store.pages.get(e.path)?.needsReview) this.goTo(e.path);
+			else if (this.settings.showReviewed) this.goToNextAfter(e, index + 1);
 			else this.goToNextAfter(e, Math.max(0, index));
 		} catch (err) {
 			console.error("Periodic Note Review: couldn't mark the note reviewed", err);

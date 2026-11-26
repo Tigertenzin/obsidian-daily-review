@@ -6,10 +6,11 @@
  *   css=<name>                    also load dev/.local/themes/<name>.css (a community theme)
  */
 import { parse as parseYaml } from "yaml";
-import { Events, installDomHelpers, moment, Platform, Scope, setIcon, TFile } from "./obsidian-mock";
+import { Events, installDomHelpers, moment, Platform, Scope, setIcon, TFile, TFolder } from "./obsidian-mock";
 import { mergeSettings } from "../../src/core/settings";
 import { NoteStore } from "../../src/store";
 import { ReviewView } from "../../src/view";
+import { ReviewSettingTab } from "../../src/settingsTab";
 
 installDomHelpers();
 
@@ -93,6 +94,9 @@ notes[`Inbox/${dayName(1)} grocery list.md`] = "- [ ] Oat milk\n- [x] Coffee\n- 
 notes[`Inbox/${dayName(6)} idea dump.md`] =
 	"A day with no daily note, only this.\n\n- [ ] Look into a better backup setup\n- [ ] Write up the trip idea\n";
 notes[`Inbox/${dayName(2)} already seen.md`] = "---\nreviewed: true\n---\n- [ ] Not counted: reviewed\n";
+notes[`Inbox/${dayName(1)} 2008 a dream text rn.md`] = "Something about a lighthouse again.\n\n- [ ] Look up what it means\n";
+// A reviewed daily note (4 days ago) whose day still has a scrap to review.
+notes[`Inbox/${dayName(4)} 0915 parking spot.md`] = "Level 3, row F.\n\n- [ ] Pay the parking fine\n";
 notes["Inbox/Ideas.md"] = "No date in this name, so it isn't a scrap.\n";
 notes[`Calls/Call ${dayName(3)} with Sam.md`] = "## Follow up\n- [ ] Send Sam the slides #task\n- [ ] Ask about the venue\n";
 
@@ -112,6 +116,8 @@ const app: any = {
 	scope: null,
 	vault: {
 		getMarkdownFiles: () => [...files.values()],
+		getAllLoadedFiles: () => [...new Set([...files.keys()].map((p) => p.split("/").slice(0, -1).join("/")).filter(Boolean))]
+			.map((p) => new TFolder(p)),
 		getAbstractFileByPath: (p: string) => files.get(p) ?? null,
 		cachedRead: async (f: TFile) => notes[f.path],
 		process: async (f: TFile, fn: (s: string) => string) => {
@@ -142,12 +148,13 @@ settings.itemTypes = [
 ];
 
 settings.extraFolders = [
-	{ id: "inbox", folder: "Inbox", label: "", color: "", enabled: true, subfolders: true, dateFormat: "YYYY-MM-DD",
+	{ id: "inbox", folder: "Inbox", label: "", color: "", enabled: true, subfolders: true, dateFormat: "YYYY-MM-DD HHmm | YYYY-MM-DD",
 		pattern: "{date}.*", statusField: "", missingStatus: "unreviewed", defaultType: "" },
 	{ id: "calls", folder: "Calls", label: "Call notes", color: "#4f8fe8", enabled: true, subfolders: true,
 		dateFormat: "YYYY-MM-DD", pattern: "Call {date}.*", statusField: "", missingStatus: "unreviewed", defaultType: "work" },
 ];
 if (params.get("layout") === "pages") settings.extraLayout = "pages";
+if (params.get("review") === "together") settings.scrapReview = "together";
 
 const store = new NoteStore(app, () => settings);
 metadataEvents.on("changed", (f: TFile, data: string) => void store.update(f, data));
@@ -179,5 +186,17 @@ const view = new ReviewView({ app, containerEl: leafContent }, plugin);
 document.addEventListener("keydown", (e) => view.scope?.handle(e as KeyboardEvent));
 
 await store.rebuild();
-await view.onOpen();
+const settingsTab = params.get("settings");
+if (settingsTab) {
+	// The settings tab instead of the review page.
+	const modal = document.body.createDiv({ cls: "pnr-harness-settings" });
+	modal.style.cssText = "position: absolute; top: 0; left: 0; right: 0; max-width: 720px; margin: 0 auto; padding: 16px; background: var(--background-primary);";
+	const tab = new ReviewSettingTab(app, { ...plugin, manifest: { version: "dev" } });
+	(tab as any).tab = settingsTab;
+	modal.appendChild(tab.containerEl);
+	tab.display();
+	appContainer.remove();
+} else {
+	await view.onOpen();
+}
 (window as any).pnrReady = true;

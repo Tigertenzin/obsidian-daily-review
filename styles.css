@@ -1053,13 +1053,21 @@
 		var(--background-secondary) 50%,
 		color-mix(in srgb, var(--pnr-scrap-color) 35%, var(--background-primary)) 50%);
 }
+/* Folder, name and time on the left (wrapping); the scrap's own button stays top right. */
 .pnr-scrap-head {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--size-4-2);
+	font-size: var(--font-ui-small);
+	padding-inline-end: var(--size-4-3);
+}
+.pnr-scrap-id {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: baseline;
 	gap: var(--size-4-1) var(--size-4-2);
-	font-size: var(--font-ui-small);
-	padding-inline-end: var(--size-4-3);
+	min-width: 0;
+	flex: 1;
 }
 .pnr-scrap-folder {
 	font-size: var(--font-ui-smaller);
@@ -1188,4 +1196,86 @@
 .pnr-preview-misses {
 	margin-top: var(--size-4-1);
 	color: var(--text-faint);
+}
+
+/* A scrap's time, and its own Mark reviewed button at the top right. */
+.pnr-scrap-time {
+	font-size: var(--font-ui-smaller);
+	font-variant-numeric: tabular-nums;
+	color: var(--text-muted);
+}
+.pnr-view button.pnr-scrap-mark {
+	flex: none;
+	white-space: nowrap;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	height: auto;
+	padding: 2px var(--size-4-2);
+	font-size: var(--font-ui-smaller);
+	box-shadow: none;
+	border: 1px solid color-mix(in srgb, var(--pnr-scrap-color) 45%, var(--background-modifier-border));
+	background: color-mix(in srgb, var(--pnr-scrap-color) 14%, var(--background-primary));
+	color: var(--text-normal);
+}
+.pnr-view button.pnr-scrap-mark:hover {
+	background: color-mix(in srgb, var(--pnr-scrap-color) 24%, var(--background-primary));
+}
+.pnr-view button.pnr-scrap-mark.is-reviewed {
+	background: transparent;
+	border-color: transparent;
+	color: var(--color-green);
+}
+.pnr-scrap-mark svg {
+	width: 13px;
+	height: 13px;
+}
+/* A reviewed daily note left off a page that still has scraps to review. */
+.pnr-note-hidden {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: var(--size-4-1) var(--size-4-2);
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+.pnr-view button.pnr-link-btn {
+	height: auto;
+	padding: 0;
+	background: none;
+	border: none;
+	box-shadow: none;
+	color: var(--text-accent);
+	font-size: inherit;
+	cursor: pointer;
+}
+.pnr-view button.pnr-link-btn:hover {
+	text-decoration: underline;
+}
+
+/* Settings tabs */
+.pnr-settings-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--size-4-1);
+	margin: var(--size-4-2) 0 var(--size-4-4);
+	padding-bottom: var(--size-4-2);
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+.pnr-settings button.pnr-settings-tab {
+	height: auto;
+	padding: var(--size-4-1) var(--size-4-3);
+	border-radius: var(--radius-m);
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+.pnr-settings button.pnr-settings-tab:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+.pnr-settings button.pnr-settings-tab.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
 }

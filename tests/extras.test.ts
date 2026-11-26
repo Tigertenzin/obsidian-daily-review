@@ -15,7 +15,7 @@ function note(p: Partial<NoteEntry>): NoteEntry {
 		isWeekend: false, needsReview: true, counts: {}, open: 0, tasks: 0, settled: 0, ...p };
 }
 function scrap(p: Partial<ExtraEntry>): ExtraEntry {
-	return { path: "Inbox/s.md", title: "s", folderId: "inbox", date: "2026-11-20", needsReview: true,
+	return { path: "Inbox/s.md", title: "s", name: "s", time: null, folderId: "inbox", date: "2026-11-20", needsReview: true,
 		counts: {}, open: 0, tasks: 0, settled: 0, ...p };
 }
 
@@ -128,12 +128,24 @@ describe("pages", () => {
 	});
 });
 
-describe("scrap names", () => {
+describe("scrap names and times", () => {
 	it("drops the date and the separators around it", async () => {
-		const { scrapName } = await import("../src/core/extras");
-		expect(scrapName("2026-11-22 call with Sam", "2026-11-22", "YYYY-MM-DD")).toBe("call with Sam");
-		expect(scrapName("Call 2026-11-22 with Sam", "2026-11-22", "YYYY-MM-DD")).toBe("Call with Sam");
-		expect(scrapName("2026-11-22 - groceries", "2026-11-22", "YYYY-MM-DD")).toBe("groceries");
-		expect(scrapName("2026-11-22", "2026-11-22", "YYYY-MM-DD")).toBe("2026-11-22");
+		const { matchExtraSpan, nameWithoutDate } = await import("../src/core/extras");
+		const strip = (t: string, f = "YYYY-MM-DD", p = ".*") => {
+			const m = matchExtraSpan(t, f, p.includes("{date}") ? p : "{date}" + p)!;
+			return nameWithoutDate(t, m.at, m.length);
+		};
+		expect(strip("2026-11-22 call with Sam")).toBe("call with Sam");
+		expect(strip("Call 2026-11-22 with Sam", "YYYY-MM-DD", "Call {date}.*")).toBe("Call with Sam");
+		expect(strip("2026-11-22 - groceries")).toBe("groceries");
+		expect(strip("2026-11-22")).toBe("2026-11-22");
+		expect(strip("2026-11-25 2008 a dream text rn", "YYYY-MM-DD HHmm")).toBe("a dream text rn");
+	});
+	it("reads a time, and tries alternative formats longest first", async () => {
+		const { matchExtraSpan } = await import("../src/core/extras");
+		const f = "YYYY-MM-DD HHmm | YYYY-MM-DD";
+		expect(matchExtraSpan("2026-11-25 2008 a dream", f, "{date}.*")).toMatchObject({ date: "2026-11-25", time: "20:08", length: 15 });
+		expect(matchExtraSpan("2026-11-25 a dream", f, "{date}.*")).toMatchObject({ date: "2026-11-25", time: null, length: 10 });
+		expect(matchExtraSpan("2026-11-25 2508 nope", "YYYY-MM-DD HHmm", "{date}.*")).toBeNull();
 	});
 });

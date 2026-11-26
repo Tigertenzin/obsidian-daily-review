@@ -246,3 +246,207 @@ export const MarkdownRenderer = {
 		});
 	},
 };
+
+// ------------------------------------------------------------------ settings UI (for the settings tab)
+
+export class TFolder extends TAbstractFile {
+	constructor(path: string) {
+		super();
+		this.path = path;
+	}
+	isRoot() {
+		return this.path === "/";
+	}
+}
+
+class ValueComponent<T> {
+	protected handlers: ((v: T) => any)[] = [];
+	onChange(cb: (v: T) => any) {
+		this.handlers.push(cb);
+		return this;
+	}
+	protected fire(v: T) {
+		for (const h of this.handlers) h(v);
+	}
+	setTooltip(t: string) {
+		(this as any).el?.setAttribute("aria-label", t);
+		return this;
+	}
+}
+
+class TextComponent extends ValueComponent<string> {
+	inputEl: HTMLInputElement;
+	el: HTMLElement;
+	constructor(parent: HTMLElement, tag: "input" | "textarea" = "input") {
+		super();
+		this.inputEl = parent.createEl(tag as "input", { type: "text" });
+		this.el = this.inputEl;
+		this.inputEl.addEventListener("input", () => this.fire(this.inputEl.value));
+	}
+	setValue(v: string) {
+		this.inputEl.value = v;
+		return this;
+	}
+	setPlaceholder(v: string) {
+		this.inputEl.placeholder = v;
+		return this;
+	}
+}
+
+class ToggleComponent extends ValueComponent<boolean> {
+	el: HTMLElement;
+	private on = false;
+	constructor(parent: HTMLElement) {
+		super();
+		this.el = parent.createDiv({ cls: "checkbox-container" });
+		this.el.addEventListener("click", () => {
+			this.setValue(!this.on);
+			this.fire(this.on);
+		});
+	}
+	setValue(v: boolean) {
+		this.on = v;
+		this.el.toggleClass("is-enabled", v);
+		return this;
+	}
+}
+
+class DropdownComponent extends ValueComponent<string> {
+	selectEl: HTMLSelectElement;
+	el: HTMLElement;
+	constructor(parent: HTMLElement) {
+		super();
+		this.selectEl = parent.createEl("select", { cls: "dropdown" });
+		this.el = this.selectEl;
+		this.selectEl.addEventListener("change", () => this.fire(this.selectEl.value));
+	}
+	addOption(v: string, label: string) {
+		this.selectEl.createEl("option", { value: v, text: label });
+		return this;
+	}
+	addOptions(o: Record<string, string>) {
+		for (const [v, l] of Object.entries(o)) this.addOption(v, l);
+		return this;
+	}
+	setValue(v: string) {
+		this.selectEl.value = v;
+		return this;
+	}
+}
+
+class ColorComponent extends ValueComponent<string> {
+	el: HTMLInputElement;
+	constructor(parent: HTMLElement) {
+		super();
+		this.el = parent.createEl("input", { type: "color" });
+		this.el.addEventListener("input", () => this.fire(this.el.value));
+	}
+	setValue(v: string) {
+		this.el.value = v;
+		return this;
+	}
+}
+
+class ButtonComponent {
+	el: HTMLElement;
+	constructor(parent: HTMLElement, cls: string) {
+		this.el = parent.createEl("button", { cls });
+	}
+	setButtonText(t: string) {
+		this.el.setText(t);
+		return this;
+	}
+	setIcon(i: string) {
+		setIcon(this.el, i);
+		return this;
+	}
+	setTooltip(t: string) {
+		this.el.setAttribute("aria-label", t);
+		return this;
+	}
+	setDisabled(d: boolean) {
+		this.el.toggleClass("is-disabled", d);
+		return this;
+	}
+	setCta() {
+		this.el.addClass("mod-cta");
+		return this;
+	}
+	onClick(cb: () => any) {
+		this.el.addEventListener("click", cb);
+		return this;
+	}
+}
+
+export class Setting {
+	settingEl: HTMLElement;
+	infoEl: HTMLElement;
+	nameEl: HTMLElement;
+	descEl: HTMLElement;
+	controlEl: HTMLElement;
+	constructor(parent: HTMLElement) {
+		this.settingEl = parent.createDiv({ cls: "setting-item" });
+		this.infoEl = this.settingEl.createDiv({ cls: "setting-item-info" });
+		this.nameEl = this.infoEl.createDiv({ cls: "setting-item-name" });
+		this.descEl = this.infoEl.createDiv({ cls: "setting-item-description" });
+		this.controlEl = this.settingEl.createDiv({ cls: "setting-item-control" });
+	}
+	setName(n: string) {
+		this.nameEl.setText(n);
+		return this;
+	}
+	setDesc(d: string) {
+		this.descEl.setText(d);
+		return this;
+	}
+	setClass(c: string) {
+		this.settingEl.addClass(c);
+		return this;
+	}
+	setHeading() {
+		this.settingEl.addClass("setting-item-heading");
+		return this;
+	}
+	addText(cb: (c: TextComponent) => any) {
+		cb(new TextComponent(this.controlEl));
+		return this;
+	}
+	addTextArea(cb: (c: TextComponent) => any) {
+		cb(new TextComponent(this.controlEl, "textarea"));
+		return this;
+	}
+	addToggle(cb: (c: ToggleComponent) => any) {
+		cb(new ToggleComponent(this.controlEl));
+		return this;
+	}
+	addDropdown(cb: (c: DropdownComponent) => any) {
+		cb(new DropdownComponent(this.controlEl));
+		return this;
+	}
+	addColorPicker(cb: (c: ColorComponent) => any) {
+		cb(new ColorComponent(this.controlEl));
+		return this;
+	}
+	addExtraButton(cb: (c: ButtonComponent) => any) {
+		cb(new ButtonComponent(this.controlEl, "clickable-icon extra-setting-button"));
+		return this;
+	}
+	addButton(cb: (c: ButtonComponent) => any) {
+		cb(new ButtonComponent(this.controlEl, ""));
+		return this;
+	}
+}
+
+export class PluginSettingTab {
+	containerEl: HTMLElement;
+	constructor(public app: any, _plugin: unknown) {
+		this.containerEl = document.createElement("div");
+		this.containerEl.className = "vertical-tab-content";
+	}
+}
+
+export class AbstractInputSuggest<T> {
+	constructor(public app: any, _el: HTMLElement) {}
+	close() {}
+	setValue(_v: T) {}
+}
