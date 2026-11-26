@@ -1322,3 +1322,31 @@
 .pnr-view button.pnr-folder-chip.is-hidden .pnr-folder-chip-icon {
 	color: var(--text-faint);
 }
+
+/* A reviewed scrap folded down to its title bar. */
+.pnr-scrap-sheet.is-collapsed .pnr-scrap-body {
+	display: none;
+}
+.pnr-view .pnr-sheet.pnr-scrap-sheet.is-collapsed {
+	padding-top: var(--size-4-2);
+	padding-bottom: var(--size-4-2);
+}
+.pnr-view button.pnr-scrap-fold {
+	flex: none;
+	align-self: center;
+	height: auto;
+	padding: 2px;
+	margin-inline-start: calc(-1 * var(--size-4-2));
+	color: var(--text-muted);
+}
+.pnr-scrap-fold svg {
+	width: 14px;
+	height: 14px;
+	transition: transform 120ms ease;
+}
+.pnr-scrap-fold[aria-expanded="true"] svg {
+	transform: rotate(90deg);
+}
+.pnr-scrap-sheet.is-collapsed .pnr-scrap-id {
+	align-self: center;
+}

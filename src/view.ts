@@ -12,7 +12,7 @@ import {
 	shortAge, sortEntries, ticksFor, weekNumber,
 } from "./core/queue";
 import { reviewedValueFor, statusFieldFor, unreviewedValueFor, withFrontmatterValue } from "./core/review";
-import { ExtraFolder, Kind, OTHER_ID, SortMode } from "./core/settings";
+import { DEFAULT_EXTRA_FOLDER, ExtraFolder, Kind, OTHER_ID, SortMode } from "./core/settings";
 import type PeriodicNoteReviewPlugin from "./main";
 
 export const VIEW_TYPE = "periodic-note-review";
@@ -89,6 +89,8 @@ export class ReviewView extends ItemView {
 	private renderToken = 0;
 	/** The notes drawn on the current page, in order. */
 	private sections: Section[] = [];
+	/** Reviewed scraps the reader unfolded (while reviewed scraps start folded). */
+	private expandedScraps = new Set<string>();
 	/** A page whose reviewed daily note the reader asked to see anyway. */
 	private shownNote: string | null = null;
 
@@ -379,7 +381,8 @@ export class ReviewView extends ItemView {
 
 	/** Filters that differ from the default, for the compact Filter button's badge. */
 	private activeFilterCount(): number {
-		return (this.filter === "all" ? 0 : 1) + this.typeFilter.size + this.settings.hiddenExtraFolders
+		return (this.filter === "all" ? 0 : 1) + this.typeFilter.size + (this.settings.hideDailyNotes ? 1 : 0)
+			+ this.settings.hiddenExtraFolders
 			.filter((id) => this.settings.extraFolders.some((f) => f.id === id && f.enabled)).length;
 	}
 
@@ -481,6 +484,18 @@ export class ReviewView extends ItemView {
 		const folders = this.scrapFolders();
 		if (folders.length > 0) {
 			panel.createDiv({ cls: "pnr-filter-heading", text: "Scraps" });
+			const dailyRow = panel.createDiv({ cls: "pnr-type-row" });
+			const dailyName = dailyRow.createDiv({ cls: "pnr-type-row-name" });
+			setIcon(dailyName.createSpan({ cls: "pnr-folder-row-icon" }), "calendar-days");
+			dailyName.createSpan({ text: "Daily notes" });
+			const dailySeg = dailyRow.createDiv({ cls: "pnr-segmented is-small" });
+			for (const [hide, label] of [[false, "Show"], [true, "Hide"]] as const) {
+				const b = dailySeg.createEl("button", { cls: "pnr-seg", text: label });
+				b.toggleClass("is-active", this.settings.hideDailyNotes === hide);
+				b.addEventListener("click", () => {
+					if (this.settings.hideDailyNotes !== hide) void this.setDailyHidden(hide);
+				});
+			}
 			for (const { folder, count, hidden } of folders) {
 				const row = panel.createDiv({ cls: "pnr-type-row" });
 				row.style.setProperty("--pnr-color", folder.color || "var(--color-yellow)");
@@ -611,8 +626,9 @@ export class ReviewView extends ItemView {
 
 	/** "Clear filters": show every extra folder again. */
 	private clearHiddenFolders() {
-		if (this.settings.hiddenExtraFolders.length === 0) return;
+		if (this.settings.hiddenExtraFolders.length === 0 && !this.settings.hideDailyNotes) return;
 		this.settings.hiddenExtraFolders = [];
+		this.settings.hideDailyNotes = false;
 		void this.plugin.saveSettings(false);
 	}
 
@@ -626,11 +642,27 @@ export class ReviewView extends ItemView {
 		this.afterFilterChange();
 	}
 
+	/** Leave daily notes off the review (or bring them back), to look over the scraps on their own. */
+	private async setDailyHidden(hide: boolean) {
+		this.settings.hideDailyNotes = hide;
+		await this.plugin.saveSettings(false);
+		if (this.currentPath) this.currentPath = this.store.pageKeyFor(this.currentPath);
+		this.afterFilterChange();
+	}
+
 	/** One chip per extra folder: its colour, name and count; click to hide or show its scraps. */
 	private renderFolderChips(parent: HTMLElement) {
 		const folders = this.scrapFolders();
 		if (folders.length === 0) return;
 		const wrap = parent.createDiv({ cls: "pnr-folder-chips" });
+		const hideDaily = this.settings.hideDailyNotes;
+		const daily = wrap.createEl("button", { cls: "pnr-chip pnr-folder-chip pnr-daily-chip" });
+		daily.toggleClass("is-hidden", hideDaily);
+		setIcon(daily.createSpan({ cls: "pnr-folder-chip-icon" }), hideDaily ? "eye-off" : "calendar-days");
+		daily.createSpan({ text: "Daily notes" });
+		daily.setAttr("aria-pressed", hideDaily ? "false" : "true");
+		daily.setAttr("aria-label", hideDaily ? "Daily notes are hidden. Click to show them." : "Click to hide daily notes and look over the scraps on their own");
+		daily.addEventListener("click", () => void this.setDailyHidden(!hideDaily));
 		for (const { folder, count, hidden } of folders) {
 			const chip = wrap.createEl("button", { cls: "pnr-chip pnr-folder-chip" });
 			chip.style.setProperty("--pnr-scrap-color", folder.color || "var(--color-yellow)");
@@ -907,10 +939,7 @@ export class ReviewView extends ItemView {
 
 	/** A stand-in for a scrap whose folder was removed from the settings since it was read. */
 	private missingFolder(): ExtraFolder {
-		return {
-			id: "", folder: "", label: "Scrap", color: "", enabled: true, subfolders: true, dateFormat: "",
-			pattern: "", statusField: "", missingStatus: "unreviewed", defaultType: "",
-		};
+		return { ...DEFAULT_EXTRA_FOLDER, id: "", label: "Scrap" };
 	}
 
 	/** A scrap's name without the date, for places that already show the day. */
@@ -948,7 +977,9 @@ export class ReviewView extends ItemView {
 		const sections: Section[] = members.map((m, i) => ({
 			file: m.file,
 			analysis: analyzeNote(raws[i], m.file.basename, this.settings,
-				m.scrap ? this.extraFolder(m.scrap.folderId)?.defaultType || undefined : undefined),
+				m.scrap ? this.extraFolder(m.scrap.folderId)?.defaultType || undefined : undefined,
+				// A scrap titled by its first H1 doesn't repeat it on the page.
+				!!m.scrap && this.extraFolder(m.scrap.folderId)?.titleFrom === "heading"),
 			itemEls: [],
 			matched: false,
 			counted: !e.needsReview || m.needsReview,
@@ -996,7 +1027,12 @@ export class ReviewView extends ItemView {
 			await render(sections[next++], sheet.createDiv({ cls: "pnr-note markdown-rendered markdown-preview-view" }));
 		} else if (next < sections.length) {
 			// Each scrap is a sheet of its own under the day's sheet, like a scrap's own page.
-			if (!e.note) sheet.createDiv({ cls: "pnr-scraps-heading", text: "No daily note for this day" });
+			if (!e.note) {
+				sheet.createDiv({
+					cls: "pnr-scraps-heading",
+					text: this.settings.hideDailyNotes ? "Daily notes are hidden" : "No daily note for this day",
+				});
+			}
 			const pile = createDiv({ cls: "pnr-scraps" });
 			extraSheets.push(pile);
 			for (const x of e.scraps) {
@@ -1008,6 +1044,23 @@ export class ReviewView extends ItemView {
 				card.style.setProperty("--pnr-scrap-color", this.scrapColor(x));
 				card.toggleClass("is-reviewed", !x.needsReview);
 				const headRow = card.createDiv({ cls: "pnr-scrap-head" });
+				// A reviewed scrap folds down to this bar; the chevron opens it.
+				if (!x.needsReview && this.settings.collapseReviewedScraps) {
+					const open = this.expandedScraps.has(x.path);
+					card.toggleClass("is-collapsed", !open);
+					const fold = headRow.createEl("button", { cls: "pnr-scrap-fold clickable-icon" });
+					setIcon(fold, "chevron-right");
+					fold.setAttr("aria-expanded", open ? "true" : "false");
+					fold.setAttr("aria-label", open ? "Fold this reviewed scrap" : "Show this reviewed scrap");
+					fold.addEventListener("click", () => {
+						const now = !this.expandedScraps.has(x.path);
+						if (now) this.expandedScraps.add(x.path);
+						else this.expandedScraps.delete(x.path);
+						card.toggleClass("is-collapsed", !now);
+						fold.setAttr("aria-expanded", now ? "true" : "false");
+						fold.setAttr("aria-label", now ? "Fold this reviewed scrap" : "Show this reviewed scrap");
+					});
+				}
 				const head = headRow.createDiv({ cls: "pnr-scrap-id" });
 				const folder = this.extraFolder(x.folderId) ?? this.missingFolder();
 				head.createSpan({ cls: "pnr-scrap-folder", text: extraLabel(folder) });
@@ -1026,7 +1079,7 @@ export class ReviewView extends ItemView {
 					btn.createSpan({ text: x.needsReview ? "Mark reviewed" : "Reviewed" });
 					btn.setAttr("aria-label", x.needsReview ? `Mark "${x.name}" reviewed` : `Reviewed. Click to mark "${x.name}" unreviewed`);
 					btn.addEventListener("click", () => void this.markScrap(x));
-				} else if (!x.needsReview && e.needsReview) {
+				} else if (!x.needsReview && (e.needsReview || this.settings.collapseReviewedScraps)) {
 					head.createSpan({ cls: "pnr-reviewed-pill", text: "Reviewed" });
 				}
 				await render(sec, card.createDiv({ cls: "pnr-note pnr-scrap-body markdown-rendered markdown-preview-view" }));

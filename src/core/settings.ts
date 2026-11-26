@@ -81,11 +81,17 @@ export interface ExtraFolder {
 	missingStatus: MissingStatus;
 	/** Type for items under no matching heading. Empty = Other. */
 	defaultType: string;
+	/**
+	 * Where a scrap's title comes from: its file name without the date, or the note's
+	 * first H1 (left off the page, since it's the title). Falls back to the file name.
+	 */
+	titleFrom: "filename" | "heading";
 }
 
 export const DEFAULT_EXTRA_FOLDER: Omit<ExtraFolder, "id"> = {
 	folder: "", label: "", color: "", enabled: true, subfolders: true, dateFormat: "YYYY-MM-DD",
 	pattern: "{date}.*", statusField: "", missingStatus: "unreviewed", defaultType: "",
+	titleFrom: "filename",
 };
 
 export interface Settings {
@@ -135,6 +141,10 @@ export interface Settings {
 	viewFilter: string;
 	viewTypeFilter: Record<string, "include" | "exclude">;
 	hiddenExtraFolders: string[];
+	/** View option: leave daily notes off the review, to look over the scraps on their own. */
+	hideDailyNotes: boolean;
+	/** Fold a reviewed scrap down to its title bar (below the daily note). */
+	collapseReviewedScraps: boolean;
 }
 
 export const OTHER_ID = "other";
@@ -200,6 +210,8 @@ export const DEFAULT_SETTINGS: Settings = {
 	viewFilter: "all",
 	viewTypeFilter: {},
 	hiddenExtraFolders: [],
+	hideDailyNotes: false,
+	collapseReviewedScraps: true,
 };
 
 /** Deep-ish merge of saved data over the defaults, so new settings get their default. */

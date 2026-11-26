@@ -635,6 +635,13 @@ export class ReviewSettingTab extends PluginSettingTab {
 						this.save(false);
 					}));
 			new Setting(el)
+				.setName("Fold reviewed scraps")
+				.setDesc("Show a reviewed scrap as just its title bar, with a chevron to open it.")
+				.addToggle((t) => t.setValue(this.s.collapseReviewedScraps).onChange((v) => {
+					this.s.collapseReviewedScraps = v;
+					this.save(false);
+				}));
+			new Setting(el)
 				.setName("Hide a reviewed daily note while its scraps aren't")
 				.setDesc("When a day's note is reviewed but some of its scraps aren't, show only the scraps. A \"Show it\" link brings the note back.")
 				.addToggle((t) => t.setValue(this.s.hideReviewedNote).onChange((v) => {
@@ -811,6 +818,17 @@ export class ReviewSettingTab extends PluginSettingTab {
 				.setValue(f.missingStatus)
 				.onChange((v) => {
 					f.missingStatus = v as MissingStatus;
+					changed();
+				}));
+		new Setting(box)
+			.setName("Title")
+			.setDesc("What a scrap is called on the page and in the queue. With the first H1, that heading isn't repeated in the note below it; notes without one use the file name.")
+			.setClass("pnr-sub")
+			.addDropdown((d) => d
+				.addOptions({ filename: "File name, without the date", heading: "The note's first H1 heading" })
+				.setValue(f.titleFrom)
+				.onChange((v) => {
+					f.titleFrom = v as "filename" | "heading";
 					changed();
 				}));
 		new Setting(box)

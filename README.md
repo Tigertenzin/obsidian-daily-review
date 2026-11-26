@@ -32,9 +32,11 @@ marks the note reviewed once you've dealt with them.
   Below the daily note, each scrap has its own Mark reviewed button by default (the page's
   button marks the daily note), and a reviewed daily note steps aside while its day still
   has scraps to review. Both are settings. In the queue, a day's scraps show as one icon
-  with a count, or (a setting) one icon per scrap in its folder's colour.
-- **Filters that stay put.** Filter by kind and by item type, and show or hide each extra
-  folder's scraps (chips beside the kind filters, or the Filter panel on small screens).
+  with a count, or (a setting) one icon per scrap in its folder's colour. Reviewed scraps fold
+  down to their title bar (a setting). A scrap's title is its file name without the date,
+  or (per folder) the note's first H1, which then isn't repeated on the page.
+- **Filters that stay put.** Filter by kind and by item type, show or hide each extra
+  folder's scraps, and hide the daily notes to look over the scraps on their own (chips beside the kind filters, or the Filter panel on small screens).
   The filters, sort, "Show reviewed" and whether Upcoming is open are saved with the
   plugin's settings, so they're remembered after a restart and, with Obsidian Sync
   syncing plugin settings, carried to your other devices.

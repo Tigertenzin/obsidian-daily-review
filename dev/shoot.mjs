@@ -131,6 +131,30 @@ const states = [
 		}
 		await p.waitForTimeout(500);
 	} },
+	// A reviewed scrap folded under a daily note still to review.
+	{ name: "scraps-folded", run: async (p) => {
+		await p.evaluate(() => window.pnr.view.goTo(window.pnr.store.pageKeyFor("pnr-day:" + window.pnr.dayName(2))));
+		await p.waitForTimeout(400);
+		await p.evaluate(() => {
+			const main = document.querySelector(".pnr-main");
+			main.scrollTop = main.scrollHeight;
+		});
+		await p.waitForTimeout(200);
+	} },
+	// A scrap titled by its first H1.
+	{ name: "scraps-h1", only: (s) => s.device !== "tablet", run: async (p) => {
+		await p.evaluate(() => window.pnr.view.goTo(window.pnr.store.pageKeyFor("pnr-day:" + window.pnr.dayName(3))));
+		await p.waitForTimeout(400);
+		await p.evaluate(() => { const m = document.querySelector(".pnr-main"); m.scrollTop = m.scrollHeight; });
+		await p.waitForTimeout(200);
+	} },
+	// Daily notes hidden, reviewed shown: the scraps on their own.
+	{ name: "scraps-daily-hidden", query: "&daily=hidden", run: async (p) => {
+		await p.evaluate(() => window.pnr.view.goTo(window.pnr.store.pageKeyFor("pnr-day:" + window.pnr.dayName(1))));
+		await p.waitForTimeout(400);
+		if (await p.$(".pnr-view.is-narrow")) await p.click(".pnr-queue-toggle");
+		await p.waitForTimeout(300);
+	} },
 	// Scraps as their own pages: one scrap, and the queue.
 	{ name: "scraps-pages", layout: "pages", run: async (p) => {
 		await p.evaluate(() => {

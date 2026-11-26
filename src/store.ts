@@ -1,5 +1,5 @@
 import { App, Events, getAllTags, TAbstractFile, TFile } from "obsidian";
-import { analyzeNote } from "./core/parse";
+import { analyzeNote, plainItemText } from "./core/parse";
 import { classifyNote, hasTag, kindFromTags, todayString } from "./core/periods";
 import {
 	buildPages, compilePattern, DAY_PREFIX, ExtraEntry, extraNeedsReview, inExtraFolder, matchExtraFile, matchExtraSpan,
@@ -33,6 +33,7 @@ export class NoteStore extends Events {
 	/** Notes from extra folders, by path. */
 	extras = new Map<string, ExtraEntry>();
 	private pageCache: Map<string, QueueEntry> | null = null;
+	private allPageCache: Map<string, QueueEntry> | null = null;
 	today = todayString();
 	ready = false;
 	/** Section-level headings per note, for the settings preview. */
@@ -57,17 +58,29 @@ export class NoteStore extends Events {
 	get pages(): Map<string, QueueEntry> {
 		if (!this.pageCache) {
 			const s = this.getSettings();
-			// Scraps from folders hidden in the view are left out of the review.
+			// Scraps from folders hidden in the view, and daily notes when they're hidden,
+			// are left out of the review.
 			const hidden = new Set(s.hiddenExtraFolders);
 			const extras = [...this.extras.values()].filter((x) => !hidden.has(x.folderId));
-			this.pageCache = buildPages(this.entries.values(), extras, s.extraLayout, s.extraFolders.map((f) => f.id));
+			const notes = [...this.entries.values()].filter((n) => !(s.hideDailyNotes && n.kind === "daily"));
+			this.pageCache = buildPages(notes, extras, s.extraLayout, s.extraFolders.map((f) => f.id));
 		}
 		return this.pageCache;
+	}
+
+	/** The pages with no view options applied: what's really left to review (the status bar). */
+	get allPages(): Map<string, QueueEntry> {
+		if (!this.allPageCache) {
+			const s = this.getSettings();
+			this.allPageCache = buildPages(this.entries.values(), this.extras.values(), s.extraLayout, s.extraFolders.map((f) => f.id));
+		}
+		return this.allPageCache;
 	}
 
 	/** Rebuild the pages next time they're read (after a layout or settings change). */
 	invalidatePages(): void {
 		this.pageCache = null;
+		this.allPageCache = null;
 	}
 
 	/**
@@ -80,7 +93,10 @@ export class NoteStore extends Events {
 		for (const p of pages.values()) {
 			if (p.note?.path === pathOrKey || p.scraps.some((x) => x.path === pathOrKey)) return p.path;
 		}
-		const date = pathOrKey.startsWith(DAY_PREFIX) ? pathOrKey.slice(DAY_PREFIX.length) : null;
+		// A day's page under another key: a day page for a daily note that's hidden, or the reverse.
+		const daily = this.entries.get(pathOrKey);
+		const date = pathOrKey.startsWith(DAY_PREFIX) ? pathOrKey.slice(DAY_PREFIX.length)
+			: daily?.kind === "daily" ? daily.start : null;
 		if (date) {
 			for (const p of pages.values()) if (p.kind === "daily" && p.start === date) return p.path;
 		}
@@ -172,7 +188,10 @@ export class NoteStore extends Events {
 		// A file that is both goes with the more specific folder (the periodic one on a tie).
 		if (extra && (!period || normFolder(extra.folder.folder).length > normFolder(settings.folder).length)) {
 			const raw = data ?? (await this.app.vault.cachedRead(file));
-			const a = analyzeNote(raw, file.basename, settings, extra.folder.defaultType || undefined);
+			const fromHeading = extra.folder.titleFrom === "heading";
+			const a = analyzeNote(raw, file.basename, settings, extra.folder.defaultType || undefined, fromHeading);
+			const h1 = fromHeading ? a.headings.find((h) => h.level === 1) : undefined;
+			const h1Text = h1 ? plainItemText(h1.text) : "";
 			this.entries.delete(file.path);
 			this.headings.set(file.path, a.headings.filter((h) => h.level === settings.sectionLevel).map((h) => h.text.trim()));
 			this.extras.set(file.path, {
@@ -181,7 +200,7 @@ export class NoteStore extends Events {
 				folderId: extra.folder.id,
 				date: extra.match.date,
 				time: extra.match.time,
-				name: nameWithoutDate(file.basename, extra.match.at, extra.match.length),
+				name: h1Text || nameWithoutDate(file.basename, extra.match.at, extra.match.length),
 				needsReview: extraNeedsReview(extra.folder, cache.frontmatter, settings),
 				counts: a.counts,
 				open: a.open,

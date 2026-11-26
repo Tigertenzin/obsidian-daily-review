@@ -114,7 +114,7 @@ export default class PeriodicNoteReviewPlugin extends Plugin {
 
 	private updateStatusBar() {
 		if (!this.statusEl) return;
-		const n = [...this.store.pages.values()].filter((e) => e.needsReview && isPast(e, this.store.today)).length;
+		const n = [...this.store.allPages.values()].filter((e) => e.needsReview && isPast(e, this.store.today)).length;
 		const show = this.settings.showStatusBar && this.store.ready && n > 0;
 		this.statusEl.toggle(show);
 		const style = this.settings.statusBarStyle;

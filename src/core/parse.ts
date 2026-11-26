@@ -146,7 +146,9 @@ export function domainLabel(domain: string, labels: Record<string, string>): str
  * and the markdown to render with hidden parts blanked out. `fallbackType` is the type of
  * items under no heading, or under a section heading no type matches (default Other).
  */
-export function analyzeNote(raw: string, title: string, settings: Settings, fallbackType = OTHER_ID): NoteAnalysis {
+export function analyzeNote(
+	raw: string, title: string, settings: Settings, fallbackType = OTHER_ID, hideFirstH1 = false,
+): NoteAnalysis {
 	const lines = raw.split(/\r?\n/);
 	const hidden = new Array<boolean>(lines.length).fill(false);
 	const inCode = new Array<boolean>(lines.length).fill(false);
@@ -214,6 +216,11 @@ export function analyzeNote(raw: string, title: string, settings: Settings, fall
 		// Compared on letters and digits only, so "2026-11 (Nov)" repeats "2026-11 Nov".
 		const key = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 		if (h1 && key(title) && key(h1.text).startsWith(key(title))) hidden[h1.line] = true;
+	}
+	// The first H1, whatever it says (a scrap whose title is taken from it).
+	if (hideFirstH1) {
+		const h1 = headings.find((h) => h.level === 1);
+		if (h1) hidden[h1.line] = true;
 	}
 
 	// Navigation line

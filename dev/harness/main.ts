@@ -99,7 +99,7 @@ notes[`Inbox/${dayName(1)} 2008 a dream text rn.md`] = "Something about a lighth
 notes[`Inbox/${dayName(4)} 0915 parking spot.md`] = "Level 3, row F.\n\n- [ ] Pay the parking fine\n";
 notes[`Calls/Call ${dayName(1)} with the landlord.md`] = "- [ ] Send photos of the window\n";
 notes["Inbox/Ideas.md"] = "No date in this name, so it isn't a scrap.\n";
-notes[`Calls/Call ${dayName(3)} with Sam.md`] = "## Follow up\n- [ ] Send Sam the slides #task\n- [ ] Ask about the venue\n";
+notes[`Calls/Call ${dayName(3)} with Sam.md`] = "# Venue and slides with Sam\n\n## Follow up\n- [ ] Send Sam the slides #task\n- [ ] Ask about the venue\n";
 
 // ------------------------------------------------------------------ mock app
 
@@ -150,19 +150,22 @@ settings.itemTypes = [
 
 settings.extraFolders = [
 	{ id: "inbox", folder: "Inbox", label: "", color: "", enabled: true, subfolders: true, dateFormat: "YYYY-MM-DD HHmm | YYYY-MM-DD",
-		pattern: "{date}.*", statusField: "", missingStatus: "unreviewed", defaultType: "" },
+		pattern: "{date}.*", statusField: "", missingStatus: "unreviewed", defaultType: "", titleFrom: "filename" },
 	{ id: "calls", folder: "Calls", label: "Call notes", color: "#4f8fe8", enabled: true, subfolders: true,
-		dateFormat: "YYYY-MM-DD", pattern: "Call {date}.*", statusField: "", missingStatus: "unreviewed", defaultType: "work" },
+		dateFormat: "YYYY-MM-DD", pattern: "Call {date}.*", statusField: "", missingStatus: "unreviewed", defaultType: "work",
+		titleFrom: "heading" },
 ];
 if (params.get("layout") === "pages") settings.extraLayout = "pages";
 if (params.get("review") === "together") settings.scrapReview = "together";
 if (params.get("pile") === "each") settings.scrapQueueStyle = "each";
+if (params.get("daily") === "hidden") { settings.hideDailyNotes = true; settings.showReviewed = true; }
 
 const store = new NoteStore(app, () => settings);
 metadataEvents.on("changed", (f: TFile, data: string) => void store.update(f, data));
 const plugin: any = {
 	settings,
 	store,
+	saveViewOptions: async () => {},
 	saveSettings: async (rebuild = true) => {
 		store.invalidatePages();
 		if (rebuild) await store.rebuild();
