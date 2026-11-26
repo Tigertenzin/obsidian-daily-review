@@ -115,6 +115,22 @@ const states = [
 		await p.click(".pnr-queue-toggle");
 		await p.waitForTimeout(300);
 	} },
+	// One icon per scrap in the queue, in each folder's colour.
+	{ name: "scraps-queue-each", query: "&pile=each", run: async (p) => {
+		if (await p.$(".pnr-view.is-narrow")) await p.click(".pnr-queue-toggle");
+		await p.waitForTimeout(300);
+	} },
+	// One extra folder hidden (desktop: chips; narrow: the filter panel).
+	{ name: "scraps-folder-hidden", run: async (p) => {
+		if (await p.$(".pnr-view.is-narrow")) {
+			await p.click(".pnr-filter-toggle");
+			await p.waitForTimeout(200);
+			await p.evaluate(() => [...document.querySelectorAll(".pnr-seg")].find((b) => b.textContent === "Hide" && b.closest(".pnr-type-row")?.textContent.includes("Call notes")).click());
+		} else {
+			await p.evaluate(() => [...document.querySelectorAll(".pnr-folder-chip")].find((b) => b.textContent.includes("Call notes")).click());
+		}
+		await p.waitForTimeout(500);
+	} },
 	// Scraps as their own pages: one scrap, and the queue.
 	{ name: "scraps-pages", layout: "pages", run: async (p) => {
 		await p.evaluate(() => {
@@ -155,7 +171,7 @@ for (const size of sizes) {
 		await page.waitForFunction(() => window.pnrReady === true, null, { timeout: 10000 });
 		await page.waitForTimeout(300);
 		await state.run(page);
-		if (state.query) {
+		if (state.query?.includes("settings")) {
 			// Settings: grow the window to the page's height (WebKit doesn't repaint a scrolled page here).
 			const h = await page.evaluate(() => Math.ceil(document.querySelector(".pnr-harness-settings").getBoundingClientRect().height) + 40);
 			await page.setViewportSize({ width: size.width, height: h });

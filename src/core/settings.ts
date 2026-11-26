@@ -125,6 +125,16 @@ export interface Settings {
 	scrapReview: "separate" | "together";
 	/** Leave a reviewed daily note off the page while its day still has scraps to review. */
 	hideReviewedNote: boolean;
+	/** How a day's scraps show in its queue row: one icon and a count, or one icon per scrap in its folder's colour. */
+	scrapQueueStyle: "count" | "each";
+	/**
+	 * Remembered view options (saved with the settings, so Obsidian Sync carries them to
+	 * other devices): the kind filter, item type filters, and extra folders hidden from
+	 * the review.
+	 */
+	viewFilter: string;
+	viewTypeFilter: Record<string, "include" | "exclude">;
+	hiddenExtraFolders: string[];
 }
 
 export const OTHER_ID = "other";
@@ -186,6 +196,10 @@ export const DEFAULT_SETTINGS: Settings = {
 	extraLayout: "below",
 	scrapReview: "separate",
 	hideReviewedNote: true,
+	scrapQueueStyle: "count",
+	viewFilter: "all",
+	viewTypeFilter: {},
+	hiddenExtraFolders: [],
 };
 
 /** Deep-ish merge of saved data over the defaults, so new settings get their default. */

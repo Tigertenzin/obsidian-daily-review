@@ -292,7 +292,7 @@ export class ReviewSettingTab extends PluginSettingTab {
 			}));
 		new Setting(el)
 			.setName("Show future notes in the queue")
-			.setDesc("Notes for days and periods that haven't started yet. When off, they're folded away under \"Upcoming\" at the end of the queue, and the chevron there shows them.")
+			.setDesc("Notes for days and periods that haven't started yet. When off, they're folded away under \"Upcoming\" at the end of the queue. Opening or folding \"Upcoming\" in the queue changes this too, so it's remembered.")
 			.addToggle((t) => t.setValue(this.s.showFuture).onChange((v) => {
 				this.s.showFuture = v;
 				this.save(false);
@@ -622,6 +622,16 @@ export class ReviewSettingTab extends PluginSettingTab {
 					.setValue(this.s.scrapReview)
 					.onChange((v) => {
 						this.s.scrapReview = v as "separate" | "together";
+						this.save(false);
+					}));
+			new Setting(el)
+				.setName("Scraps in the queue")
+				.setDesc("How a day's scraps show in its queue row: one icon with a count, or one icon per scrap in its folder's colour.")
+				.addDropdown((d) => d
+					.addOptions({ count: "One icon and a count", each: "One icon per scrap" })
+					.setValue(this.s.scrapQueueStyle)
+					.onChange((v) => {
+						this.s.scrapQueueStyle = v as "count" | "each";
 						this.save(false);
 					}));
 			new Setting(el)

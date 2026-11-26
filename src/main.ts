@@ -61,6 +61,22 @@ export default class PeriodicNoteReviewPlugin extends Plugin {
 		this.registerInterval(window.setInterval(() => this.store.checkDate(), 60_000));
 	}
 
+	/** data.json changed on disk, usually from Obsidian Sync: take the new settings and view options. */
+	async onExternalSettingsChange() {
+		this.settings = mergeSettings(await this.loadData());
+		this.store.invalidatePages();
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
+			if (leaf.view instanceof ReviewView) leaf.view.loadViewOptions();
+		}
+		void this.store.rebuild();
+		this.updateStatusBar();
+	}
+
+	/** Save the settings file without re-reading notes or redrawing (remembered view options). */
+	async saveViewOptions() {
+		await this.saveData(this.settings);
+	}
+
 	onunload() {
 		// Views are detached by Obsidian.
 	}

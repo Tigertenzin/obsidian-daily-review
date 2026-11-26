@@ -1121,6 +1121,17 @@
 	font-size: var(--font-ui-smaller);
 	color: color-mix(in srgb, var(--color-yellow) 75%, var(--text-muted));
 }
+.pnr-row-scraps.is-each {
+	gap: 1px;
+}
+.pnr-row-scrap-dot {
+	display: inline-flex;
+	color: color-mix(in srgb, var(--pnr-scrap-color) 80%, var(--text-muted));
+}
+.pnr-row-scrap-dot svg {
+	width: 13px;
+	height: 13px;
+}
 /* The day above a scrap whose day has no daily note (scraps as their own pages). */
 .pnr-row-dayhead {
 	display: flex;
@@ -1278,4 +1289,36 @@
 .pnr-settings button.pnr-settings-tab.is-active {
 	background: var(--interactive-accent);
 	color: var(--text-on-accent);
+}
+
+/* Extra folder chips beside the kind chips: click to hide or show a folder's scraps. */
+.pnr-folder-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--size-4-1);
+	padding-inline-start: var(--size-4-2);
+	margin-inline-start: var(--size-4-1);
+	border-inline-start: 1px solid var(--background-modifier-border);
+}
+.pnr-view button.pnr-folder-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+.pnr-folder-chip-icon,
+.pnr-folder-row-icon {
+	display: inline-flex;
+	color: color-mix(in srgb, var(--pnr-scrap-color, var(--pnr-color)) 80%, var(--text-muted));
+}
+.pnr-folder-chip-icon svg,
+.pnr-folder-row-icon svg {
+	width: 12px;
+	height: 12px;
+}
+.pnr-view button.pnr-folder-chip.is-hidden {
+	opacity: 0.6;
+	text-decoration: line-through;
+}
+.pnr-view button.pnr-folder-chip.is-hidden .pnr-folder-chip-icon {
+	color: var(--text-faint);
 }

@@ -23,6 +23,8 @@ const CONFIRM_MS = 4000;
 /** How long the Undo bar stays after marking a note reviewed. */
 const UNDO_MS = 6000;
 const MAX_TICKS = 9;
+/** Scrap icons shown in a queue row (one per scrap) before "+N". */
+const MAX_SCRAP_ICONS = 4;
 const SORTS: { id: SortMode; label: string }[] = [
 	{ id: "oldest", label: "Oldest first" },
 	{ id: "newest", label: "Newest first" },
@@ -96,6 +98,7 @@ export class ReviewView extends ItemView {
 	constructor(leaf: WorkspaceLeaf, private plugin: PeriodicNoteReviewPlugin) {
 		super(leaf);
 		this.showFuture = plugin.settings.showFuture;
+		this.readViewOptions();
 		this.scope = new Scope(this.app.scope);
 		this.registerKeys(this.scope);
 	}
@@ -348,6 +351,8 @@ export class ReviewView extends ItemView {
 			});
 		}
 
+		this.renderFolderChips(chips);
+
 		const right = controls.createDiv({ cls: "pnr-controls-right" });
 		const sort = right.createEl("select", { cls: "dropdown pnr-sort" });
 		for (const s of SORTS) {
@@ -374,7 +379,8 @@ export class ReviewView extends ItemView {
 
 	/** Filters that differ from the default, for the compact Filter button's badge. */
 	private activeFilterCount(): number {
-		return (this.filter === "all" ? 0 : 1) + this.typeFilter.size;
+		return (this.filter === "all" ? 0 : 1) + this.typeFilter.size + this.settings.hiddenExtraFolders
+			.filter((id) => this.settings.extraFolders.some((f) => f.id === id && f.enabled)).length;
 	}
 
 	/**
@@ -471,6 +477,28 @@ export class ReviewView extends ItemView {
 			}
 		}
 
+		// Scrap folders: Show / Hide
+		const folders = this.scrapFolders();
+		if (folders.length > 0) {
+			panel.createDiv({ cls: "pnr-filter-heading", text: "Scraps" });
+			for (const { folder, count, hidden } of folders) {
+				const row = panel.createDiv({ cls: "pnr-type-row" });
+				row.style.setProperty("--pnr-color", folder.color || "var(--color-yellow)");
+				const name = row.createDiv({ cls: "pnr-type-row-name" });
+				setIcon(name.createSpan({ cls: "pnr-folder-row-icon" }), "sticky-note");
+				name.createSpan({ text: extraLabel(folder) });
+				name.createSpan({ cls: "pnr-type-pill-count", text: String(count) });
+				const seg = row.createDiv({ cls: "pnr-segmented is-small" });
+				for (const [hide, label] of [[false, "Show"], [true, "Hide"]] as const) {
+					const b = seg.createEl("button", { cls: "pnr-seg", text: label });
+					b.toggleClass("is-active", hidden === hide);
+					b.addEventListener("click", () => {
+						if (hidden !== hide) void this.setFolderHidden(folder.id, hide);
+					});
+				}
+			}
+		}
+
 		// Sort
 		const sortRow = panel.createDiv({ cls: "pnr-filter-sort" });
 		sortRow.createDiv({ cls: "pnr-filter-heading", text: "Sort" });
@@ -490,6 +518,7 @@ export class ReviewView extends ItemView {
 			clear.addEventListener("click", () => {
 				this.filter = "all";
 				this.typeFilter.clear();
+				this.clearHiddenFolders();
 				this.afterFilterChange();
 			});
 		}
@@ -534,11 +563,85 @@ export class ReviewView extends ItemView {
 
 	/** Keep the current note if it's still listed; otherwise go to the first one to review. */
 	private afterFilterChange() {
+		this.saveViewOptions();
 		const vis = this.visible();
 		if (!vis.some((e) => e.path === this.currentPath)) {
 			this.currentPath = (vis.find((e) => e.needsReview && isPast(e, this.store.today)) ?? vis[0])?.path ?? null;
 		}
 		this.renderAll();
+	}
+
+	/** Take the remembered filters from the settings. */
+	private readViewOptions() {
+		const s = this.settings;
+		this.filter = FILTERS.some((f) => f.id === s.viewFilter) ? (s.viewFilter as FilterId) : "all";
+		this.typeFilter = new Map(Object.entries(s.viewTypeFilter ?? {}));
+		this.showFuture = s.showFuture;
+	}
+
+	/** The settings changed on another device (Obsidian Sync): take its view options and redraw. */
+	loadViewOptions() {
+		this.readViewOptions();
+		if (this.topEl) this.afterFilterChange();
+	}
+
+	/** Remember the filters in the settings file, so they carry across restarts and devices. */
+	private saveViewOptions() {
+		const s = this.settings;
+		const filter = this.filter;
+		const types = Object.fromEntries(this.typeFilter);
+		if (s.viewFilter === filter && JSON.stringify(s.viewTypeFilter) === JSON.stringify(types) && s.showFuture === this.showFuture) return;
+		s.viewFilter = filter;
+		s.viewTypeFilter = types;
+		s.showFuture = this.showFuture;
+		void this.plugin.saveViewOptions();
+	}
+
+	/** Scrap folders in the review, with how many scraps each has still to review. */
+	private scrapFolders(): { folder: ExtraFolder; count: number; hidden: boolean }[] {
+		const hidden = new Set(this.settings.hiddenExtraFolders);
+		const counts = new Map<string, number>();
+		for (const x of this.store.extras.values()) {
+			if (x.needsReview) counts.set(x.folderId, (counts.get(x.folderId) ?? 0) + 1);
+		}
+		return this.settings.extraFolders
+			.filter((f) => f.enabled)
+			.map((f) => ({ folder: f, count: counts.get(f.id) ?? 0, hidden: hidden.has(f.id) }));
+	}
+
+	/** "Clear filters": show every extra folder again. */
+	private clearHiddenFolders() {
+		if (this.settings.hiddenExtraFolders.length === 0) return;
+		this.settings.hiddenExtraFolders = [];
+		void this.plugin.saveSettings(false);
+	}
+
+	/** Show or hide one extra folder's scraps in the review (remembered like the other filters). */
+	private async setFolderHidden(id: string, hide: boolean) {
+		const list = this.settings.hiddenExtraFolders.filter((x) => x !== id);
+		if (hide) list.push(id);
+		this.settings.hiddenExtraFolders = list;
+		// Pages change: let the store rebuild them, and the change event redraw the view.
+		await this.plugin.saveSettings(false);
+		this.afterFilterChange();
+	}
+
+	/** One chip per extra folder: its colour, name and count; click to hide or show its scraps. */
+	private renderFolderChips(parent: HTMLElement) {
+		const folders = this.scrapFolders();
+		if (folders.length === 0) return;
+		const wrap = parent.createDiv({ cls: "pnr-folder-chips" });
+		for (const { folder, count, hidden } of folders) {
+			const chip = wrap.createEl("button", { cls: "pnr-chip pnr-folder-chip" });
+			chip.style.setProperty("--pnr-scrap-color", folder.color || "var(--color-yellow)");
+			chip.toggleClass("is-hidden", hidden);
+			setIcon(chip.createSpan({ cls: "pnr-folder-chip-icon" }), hidden ? "eye-off" : "sticky-note");
+			chip.createSpan({ text: extraLabel(folder) });
+			chip.createSpan({ cls: "pnr-chip-count", text: String(count) });
+			chip.setAttr("aria-pressed", hidden ? "false" : "true");
+			chip.setAttr("aria-label", hidden ? `${extraLabel(folder)} is hidden. Click to show its scraps.` : `Click to hide ${extraLabel(folder)} scraps`);
+			chip.addEventListener("click", () => void this.setFolderHidden(folder.id, !hidden));
+		}
 	}
 
 	// ---------------------------------------------------------------- queue
@@ -685,10 +788,21 @@ export class ReviewView extends ItemView {
 		row.createSpan({ cls: "pnr-row-leader" });
 		const ticks = row.createDiv({ cls: "pnr-ticks" });
 		if (!scrapPage && e.scraps.length > 0) {
-			// The day's scraps: one small note per scrap, before the ticks.
+			// The day's scraps, before the ticks: one icon and a count, or one icon per scrap.
 			const pile = ticks.createSpan({ cls: "pnr-row-scraps" });
-			setIcon(pile.createSpan(), "sticky-note");
-			if (e.scraps.length > 1) pile.createSpan({ text: String(e.scraps.length) });
+			if (this.settings.scrapQueueStyle === "each") {
+				pile.addClass("is-each");
+				const shown = e.scraps.slice(0, MAX_SCRAP_ICONS);
+				for (const x of shown) {
+					const icon = pile.createSpan({ cls: "pnr-row-scrap-dot" });
+					icon.style.setProperty("--pnr-scrap-color", this.scrapColor(x));
+					setIcon(icon, "sticky-note");
+				}
+				if (e.scraps.length > shown.length) pile.createSpan({ text: `+${e.scraps.length - shown.length}` });
+			} else {
+				setIcon(pile.createSpan(), "sticky-note");
+				if (e.scraps.length > 1) pile.createSpan({ text: String(e.scraps.length) });
+			}
 			pile.setAttr("aria-label", `${e.scraps.length} ${e.scraps.length === 1 ? "scrap" : "scraps"}`);
 		}
 		const all = ticksFor(e, this.settings);
@@ -1160,6 +1274,7 @@ export class ReviewView extends ItemView {
 			clear.addEventListener("click", () => {
 				this.filter = "all";
 				this.typeFilter.clear();
+				this.clearHiddenFolders();
 				this.afterFilterChange();
 			});
 		} else {

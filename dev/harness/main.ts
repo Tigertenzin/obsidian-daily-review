@@ -97,6 +97,7 @@ notes[`Inbox/${dayName(2)} already seen.md`] = "---\nreviewed: true\n---\n- [ ] 
 notes[`Inbox/${dayName(1)} 2008 a dream text rn.md`] = "Something about a lighthouse again.\n\n- [ ] Look up what it means\n";
 // A reviewed daily note (4 days ago) whose day still has a scrap to review.
 notes[`Inbox/${dayName(4)} 0915 parking spot.md`] = "Level 3, row F.\n\n- [ ] Pay the parking fine\n";
+notes[`Calls/Call ${dayName(1)} with the landlord.md`] = "- [ ] Send photos of the window\n";
 notes["Inbox/Ideas.md"] = "No date in this name, so it isn't a scrap.\n";
 notes[`Calls/Call ${dayName(3)} with Sam.md`] = "## Follow up\n- [ ] Send Sam the slides #task\n- [ ] Ask about the venue\n";
 
@@ -155,6 +156,7 @@ settings.extraFolders = [
 ];
 if (params.get("layout") === "pages") settings.extraLayout = "pages";
 if (params.get("review") === "together") settings.scrapReview = "together";
+if (params.get("pile") === "each") settings.scrapQueueStyle = "each";
 
 const store = new NoteStore(app, () => settings);
 metadataEvents.on("changed", (f: TFile, data: string) => void store.update(f, data));

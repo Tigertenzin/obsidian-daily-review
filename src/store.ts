@@ -57,7 +57,10 @@ export class NoteStore extends Events {
 	get pages(): Map<string, QueueEntry> {
 		if (!this.pageCache) {
 			const s = this.getSettings();
-			this.pageCache = buildPages(this.entries.values(), this.extras.values(), s.extraLayout, s.extraFolders.map((f) => f.id));
+			// Scraps from folders hidden in the view are left out of the review.
+			const hidden = new Set(s.hiddenExtraFolders);
+			const extras = [...this.extras.values()].filter((x) => !hidden.has(x.folderId));
+			this.pageCache = buildPages(this.entries.values(), extras, s.extraLayout, s.extraFolders.map((f) => f.id));
 		}
 		return this.pageCache;
 	}
